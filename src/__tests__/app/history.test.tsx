@@ -1,12 +1,11 @@
 import { render, screen, userEvent } from '@testing-library/react-native';
-import History from '@/app/history';
+import History from '@/app/(tabs)/history';
 import type { Db } from '@/db/client';
 import * as repo from '@/db/repo';
 import { itemsQuery, logsQuery, readingsQuery, registerMaintenance } from '@/db/repo';
 import { addDays, formatBRL, formatDate, todayISO } from '@/domain';
 import {
   attachmentsMock,
-  params,
   redirect,
   router,
   seedVehicle,
@@ -30,7 +29,6 @@ const since = addDays(todayISO(), -60);
 beforeEach(async () => {
   db = await setupScreen();
   ({ vehicleId, oilId } = await seedVehicle(db, since));
-  params.vehicleId = vehicleId;
 });
 
 test('invites the first record when there is no history', async () => {
@@ -41,8 +39,11 @@ test('invites the first record when there is no history', async () => {
       'Nenhuma troca registrada ainda. Quando você registrar a primeira, ela aparece aqui.',
     ),
   ).toBeOnTheScreen();
-  await userEvent.setup().press(screen.getByRole('button', { name: 'Voltar para a garagem' }));
-  expect(router.dismissTo).toHaveBeenCalledWith('/');
+  expect(screen.getByRole('header', { name: 'Histórico' })).toBeOnTheScreen();
+  await userEvent
+    .setup()
+    .press(screen.getByRole('button', { name: 'Trocar de carro. Atual: Meu Sandero' }));
+  expect(router.push).toHaveBeenCalledWith('/vehicles');
 });
 
 test('shows the total spent and a reverse timeline, flagging late records', async () => {
@@ -79,7 +80,6 @@ test('shows the total spent and a reverse timeline, flagging late records', asyn
 test('shows the cost per km once readings cover a few months', async () => {
   const start = addDays(todayISO(), -200);
   const car = await seedVehicle(db, start, { nickname: 'Outro' });
-  params.vehicleId = car.vehicleId;
   const log = (performedAt: string, km: number, costCents: number) =>
     registerMaintenance(db, {
       vehicleId: car.vehicleId,
@@ -104,7 +104,7 @@ test('opens the PDF export for this car', async () => {
   expect(router.push).toHaveBeenCalledWith({ pathname: '/dossier', params: { vehicleId } });
 });
 
-test("shows the history of the car it was opened for, not the first one's", async () => {
+test("shows the selected car's history, not the first one's", async () => {
   await registerMaintenance(db, {
     vehicleId,
     itemId: oilId,
@@ -112,6 +112,7 @@ test("shows the history of the car it was opened for, not the first one's", asyn
     km: 42000,
     costCents: 9900,
   });
+  // Created last, so selected.
   const gol = await seedVehicle(db, since, { nickname: 'Meu Gol', odometerKm: 80000 });
   await registerMaintenance(db, {
     vehicleId: gol.vehicleId,
@@ -120,7 +121,6 @@ test("shows the history of the car it was opened for, not the first one's", asyn
     km: 82000,
     costCents: 15000,
   });
-  params.vehicleId = gol.vehicleId;
   await render(<History />);
 
   expect(screen.getByText('1 troca registrada')).toBeOnTheScreen();
@@ -128,10 +128,10 @@ test("shows the history of the car it was opened for, not the first one's", asyn
   expect(screen.queryByText(/42\.000 km/)).not.toBeOnTheScreen();
 });
 
-test('leaves for the garage when the car is gone', async () => {
-  params.vehicleId = 'missing';
+test('sends to onboarding when there is no car', async () => {
+  await repo.removeVehicle(db, vehicleId);
   await render(<History />);
-  expect(redirect).toHaveBeenCalledWith('/');
+  expect(redirect).toHaveBeenCalledWith('/onboarding');
 });
 
 describe('a record', () => {

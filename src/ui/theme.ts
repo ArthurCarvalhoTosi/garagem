@@ -17,6 +17,12 @@ const light = {
   okTint: '#E4F1EA',
   drum: '#1B2226',
   drumDigit: '#F4F4EE',
+  // Pill behind the selected tab icon.
+  navIndicator: '#D5DEF6',
+  // A plate is white with the blue band in any theme.
+  plateBody: '#FFFFFF',
+  plateInk: '#1B2226',
+  plateBand: '#0F3B9C',
   // Fixed by Google's sign-in branding guidelines, not by our palette.
   googleFill: '#FFFFFF',
   googleStroke: '#747775',
@@ -44,6 +50,10 @@ const dark: Colors = {
   okTint: '#16302A',
   drum: '#262E34',
   drumDigit: '#F4F4EE',
+  navIndicator: '#2A3966',
+  plateBody: '#FFFFFF',
+  plateInk: '#1B2226',
+  plateBand: '#0F3B9C',
   googleFill: '#131314',
   googleStroke: '#8E918F',
   googleText: '#E3E3E3',
@@ -59,6 +69,7 @@ export const type = {
   title: { fontFamily: 'Barlow_700Bold', fontSize: 22, lineHeight: 28 },
   display: { fontFamily: 'Barlow_700Bold', fontSize: 28, lineHeight: 34 },
   number: { fontFamily: 'BarlowCondensed_600SemiBold', fontSize: 20, lineHeight: 24 },
+  plate: { fontFamily: 'BarlowCondensed_600SemiBold', fontSize: 22, lineHeight: 28 },
   odometer: { fontFamily: 'BarlowCondensed_600SemiBold', fontSize: 44, lineHeight: 52 },
 } satisfies Record<string, TextStyle>;
 

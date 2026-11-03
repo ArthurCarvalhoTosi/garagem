@@ -29,6 +29,9 @@ const glyphs = {
   'chevron-right': { ios: 'chevron.right', android: 'chevron_right' },
   'chevron-down': { ios: 'chevron.down', android: 'expand_more' },
   'trash-can-outline': { ios: 'trash', android: 'delete' },
+  account: { ios: 'person.crop.circle', android: 'account_circle' },
+  backup: { ios: 'externaldrive.badge.plus', android: 'backup' },
+  restore: { ios: 'arrow.counterclockwise', android: 'settings_backup_restore' },
 } satisfies Record<string, { ios: SFSymbol; android: AndroidSymbol }>;
 
 export type IconName = keyof typeof glyphs;

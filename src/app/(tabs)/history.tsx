@@ -1,17 +1,20 @@
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { Image } from 'expo-image';
-import { Redirect, router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { Redirect, router } from 'expo-router';
+import { useState, type ReactNode } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { deleteRemovedPhotos, hasPhoto, readPhoto } from '@/attachments';
 import { useDb } from '@/db/provider';
-import { logsQuery, readingsQuery, removeMaintenance, vehiclesQuery } from '@/db/repo';
+import { logsQuery, readingsQuery, removeMaintenance } from '@/db/repo';
+import type { vehicles } from '@/db/schema';
+import { useCurrentVehicle } from '@/db/useCurrentVehicle';
 import { costSummary, formatBRL, formatDate, formatKm, todayISO, ValidationError } from '@/domain';
 import {
   AppText,
   Button,
   FormError,
   Icon,
+  PlateChip,
   Screen,
   Section,
   radius,
@@ -24,34 +27,39 @@ type Log = ReturnType<ReturnType<typeof logsQuery>['all']>[number];
 
 export default function History() {
   const db = useDb();
+  const vehicle = useCurrentVehicle(db);
+  if (vehicle === undefined) return null;
+  if (!vehicle) return <Redirect href="/onboarding" />;
+  // Keyed: a fresh mount per car, so one car's photo or error never shows on another.
+  return <CarHistory key={vehicle.id} vehicle={vehicle} />;
+}
+
+function CarHistory({ vehicle }: { vehicle: typeof vehicles.$inferSelect }) {
+  const db = useDb();
   const { c } = useTheme();
-  const { vehicleId } = useLocalSearchParams<{ vehicleId: string }>();
-  const [vehicle] = useState(() =>
-    vehiclesQuery(db)
-      .all()
-      .find((v) => v.id === vehicleId),
-  );
-  const logs = useLiveQuery(logsQuery(db, vehicle?.id ?? ''), [vehicle?.id]);
-  const readings = useLiveQuery(readingsQuery(db, vehicle?.id ?? ''), [vehicle?.id]);
+  const logs = useLiveQuery(logsQuery(db, vehicle.id), [vehicle.id]);
+  const readings = useLiveQuery(readingsQuery(db, vehicle.id), [vehicle.id]);
   const [error, setError] = useState<unknown>(null);
 
-  if (!vehicle) return <Redirect href="/" />;
   if (logs.error) throw logs.error;
   if (!logs.updatedAt) return null;
 
+  const top: ReactNode = (
+    <View style={styles.top}>
+      <PlateChip nickname={vehicle.nickname} onPress={() => router.push('/vehicles')} />
+      <AppText variant="display" accessibilityRole="header">
+        Histórico
+      </AppText>
+    </View>
+  );
+
   if (logs.data.length === 0) {
     return (
-      <Screen>
-        <View style={styles.empty}>
-          <AppText>
-            Nenhuma troca registrada ainda. Quando você registrar a primeira, ela aparece aqui.
-          </AppText>
-          <Button
-            variant="secondary"
-            label="Voltar para a garagem"
-            onPress={() => router.dismissTo('/')}
-          />
-        </View>
+      <Screen tab>
+        {top}
+        <AppText>
+          Nenhuma troca registrada ainda. Quando você registrar a primeira, ela aparece aqui.
+        </AppText>
       </Screen>
     );
   }
@@ -98,6 +106,7 @@ export default function History() {
 
   return (
     <Screen
+      tab
       scroll
       footer={
         <Button
@@ -106,6 +115,7 @@ export default function History() {
         />
       }
     >
+      {top}
       <View style={styles.total} accessible>
         <AppText variant="caption" color="inkMuted">
           Total gasto em manutenção
@@ -258,7 +268,7 @@ function IconButton({
 }
 
 const styles = StyleSheet.create({
-  empty: { gap: space.xl },
+  top: { gap: space.l, marginBottom: space.xl },
   total: { gap: space.xs, marginBottom: space.l },
   readouts: {
     flexDirection: 'row',

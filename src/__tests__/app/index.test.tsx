@@ -1,6 +1,6 @@
 import { act, render, screen, userEvent } from '@testing-library/react-native';
 import { AppState, type AppStateStatus } from 'react-native';
-import Dashboard from '@/app/index';
+import Dashboard from '@/app/(tabs)/index';
 import type { Db } from '@/db/client';
 import { createVehicle, selectVehicle, upsertSpecs } from '@/db/repo';
 import { devicePrefs } from '@/db/schema';
@@ -72,12 +72,9 @@ test('shows the all-clear state with the next item, and expands ok items', async
     pathname: '/register',
     params: { itemId: expect.any(String) },
   });
-
-  await user.press(screen.getByRole('button', { name: 'Ver histórico' }));
-  expect(router.push).toHaveBeenCalledWith({ pathname: '/history', params: { vehicleId } });
 });
 
-test('shows the selected car, whose sheets get its id, and offers the car list in the header', async () => {
+test('shows the selected car, whose sheets get its id, and offers the car list on the plate', async () => {
   const { vehicleId: sandero } = await seedVehicle(db);
   // Created last, so selected.
   const { vehicleId: gol } = await seedVehicle(db, todayISO(), {

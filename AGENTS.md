@@ -50,6 +50,7 @@ Os três primeiros passam antes de todo commit. Notas de build no Windows (CMake
 
 ## Telas (`src/app`)
 
+- Painel, Histórico e Ajustes são abas nativas em `src/app/(tabs)`; o resto fica no stack raiz (`_layout.tsx`), quase tudo como sheet. Aba não tem cabeçalho nativo: desenha o próprio topo (a `PlateChip` abre a lista de carros), usa `<Screen tab>` e lê o carro com `useCurrentVehicle`.
 - Todo arquivo em `src/app` vira rota, então os testes das telas ficam em `src/__tests__/app` e usam os mocks de `src/test-utils/screens.tsx` (banco sql.js com migrations reais, router e `useLiveQuery` falsos, `seedVehicle`).
 - Leitura reativa com `useLiveQuery(<query do repo>)`; escrita só pelas funções de `src/db/repo.ts`.
 - "Hoje" vem de `todayISO()` no momento da ação; o dashboard o atualiza quando o app volta ao primeiro plano.

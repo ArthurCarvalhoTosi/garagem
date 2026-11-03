@@ -4,14 +4,25 @@ import { KeyboardAvoidingView, ScrollView, StyleSheet, View } from 'react-native
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space, useTheme } from './theme';
 
-type Props = { children: ReactNode; scroll?: boolean; footer?: ReactNode };
+type Props = {
+  children: ReactNode;
+  scroll?: boolean;
+  footer?: ReactNode;
+  /** A tab screen: the tab bar already keeps clear of the bottom system inset, so skip it here. */
+  tab?: boolean;
+};
 
-export function Screen({ children, scroll = false, footer }: Props) {
+const TAB_EDGES = ['top', 'left', 'right'] as const;
+
+export function Screen({ children, scroll = false, footer, tab = false }: Props) {
   const { c } = useTheme();
   // The view measures itself below the header, so the header height is its offset from the screen top.
   const headerHeight = useContext(HeaderHeightContext) ?? 0;
   return (
-    <SafeAreaView style={[styles.root, { backgroundColor: c.bg }]}>
+    <SafeAreaView
+      edges={tab ? TAB_EDGES : undefined}
+      style={[styles.root, { backgroundColor: c.bg }]}
+    >
       {/* 'padding' on both platforms: Android is edge-to-edge since SDK 54, so adjustResize no longer
           shrinks the window and the view has to make room itself, like on iOS (Expo's edge-to-edge
           guidance). Not 'height': it keeps the first measured height, which breaks when a sheet changes detent. */}

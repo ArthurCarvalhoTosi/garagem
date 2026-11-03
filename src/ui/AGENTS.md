@@ -10,6 +10,8 @@ A identidade visual e seus motivos estão na seção 10 do doc de decisões (`..
 - Sem sombras: a separação é feita com linhas de 1px (`c.line`) e espaço.
 - Itens de manutenção são linhas de largura total com barra de urgência (`ItemRow`), não grade de cards.
 - O hodômetro de tambores é o único elemento chamativo; o resto fica discreto.
+- A `PlateChip` (apelido numa placa Mercosul) é branca nos dois temas, com tokens próprios (`plateBody`, `plateInk`, `plateBand`): uma placa não muda de cor.
+- Listas de lugares para ir (Ajustes) usam `ListRow`; listas de manutenção usam `ItemRow`.
 
 ## Acessibilidade (obrigatória)
 
