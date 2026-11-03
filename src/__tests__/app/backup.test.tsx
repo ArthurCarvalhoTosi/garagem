@@ -5,6 +5,7 @@ import { createBackupFile } from '@/backup';
 import type { Db } from '@/db/client';
 import { todayISO } from '@/domain';
 import { router, setupScreen } from '@/test-utils/screens';
+import { backupPrefsQuery, readBackupPrefs } from '@/db/repo';
 
 jest.mock('expo-router', () => require('@/test-utils/screens').expoRouterMock);
 jest.mock('@/db/provider', () => require('@/test-utils/screens').providerMock);
@@ -44,6 +45,8 @@ test('creates the file with the password, shares it, deletes the copy and closes
   );
   expect(mockFile.delete).toHaveBeenCalled();
   expect(router.back).toHaveBeenCalled();
+  // The dashboard's backup reminder starts counting from today.
+  expect(readBackupPrefs(backupPrefsQuery(db).all()).lastBackupAt).toBe(todayISO());
 });
 
 test('asks for a long enough password, typed the same twice', async () => {
@@ -66,4 +69,5 @@ test('a failure reads plainly and keeps the sheet open', async () => {
 
   expect(screen.getByText('Não foi possível salvar. Tente de novo.')).toBeOnTheScreen();
   expect(router.back).not.toHaveBeenCalled();
+  expect(readBackupPrefs(backupPrefsQuery(db).all()).lastBackupAt).toBeNull();
 });
