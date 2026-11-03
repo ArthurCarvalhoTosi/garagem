@@ -7,7 +7,7 @@ begin;
 set local role postgres;
 set local search_path = extensions, public;
 create extension if not exists pgtap with schema extensions;
-select plan(62);
+select plan(63);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-00000000000a', 'a@test.local'),
@@ -315,6 +315,15 @@ select is(
   (select count(*)::int from storage.objects
    where name = '00000000-0000-0000-0000-00000000000a/66666666-6666-6666-6666-666666666666.bin'),
   0, '... and it is gone');
+
+-- delete-account drops the key first; a token still valid after that uploads nothing.
+delete from public.user_keys where user_id = '00000000-0000-0000-0000-00000000000a';
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select throws_ok($$
+  insert into storage.objects (bucket_id, name)
+  values ('attachments', '00000000-0000-0000-0000-00000000000a/88888888-8888-8888-8888-888888888888.bin')
+$$, '42501', null, 'without a data key (account being deleted) no photo goes up');
+set local role postgres;
 
 -- Access records (Marco Civil) -------------------------------------------------------------
 

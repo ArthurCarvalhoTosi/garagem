@@ -37,11 +37,16 @@ const fetch = require('node-fetch');
 async function signedInClient(email: string): Promise<SupabaseClient> {
   const { API_URL: API, PUBLISHABLE_KEY: PUBLISHABLE, SECRET_KEY: SECRET } = localStack();
   const admin = createClient(API, SECRET, { auth: { persistSession: false }, global: { fetch } });
-  await admin.auth.admin.createUser({
+  const { data } = await admin.auth.admin.createUser({
     email,
     password: 'local-test-pass-123',
     email_confirm: true,
   });
+  // The app fetches its key (user-key) before any sync; photo uploads require one.
+  await admin
+    .from('user_keys')
+    .insert({ user_id: data.user!.id, wrapped_dek: '\\x' + '00'.repeat(60), kek_version: 1 })
+    .throwOnError();
   const sb = createClient(API, PUBLISHABLE, {
     auth: { persistSession: false },
     global: { fetch },
