@@ -16,3 +16,5 @@ export { ChipGroup } from './ChipGroup';
 export { TextField } from './TextField';
 export { FormError } from './FormError';
 export { Section } from './Section';
+export { ListRow } from './ListRow';
+export { PlateChip } from './PlateChip';

@@ -1,15 +1,10 @@
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
-import { Redirect, router, Stack } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { AppState, Pressable, StyleSheet, View } from 'react-native';
 import { useDb } from '@/db/provider';
-import {
-  itemsQuery,
-  readingsQuery,
-  selectedVehicleIdQuery,
-  specsQuery,
-  vehiclesQuery,
-} from '@/db/repo';
+import { itemsQuery, readingsQuery, specsQuery } from '@/db/repo';
+import { useCurrentVehicle } from '@/db/useCurrentVehicle';
 import type { vehicles } from '@/db/schema';
 import {
   buildFeed,
@@ -27,6 +22,7 @@ import {
   Icon,
   ItemRow,
   Odometer,
+  PlateChip,
   Screen,
   Section,
   SpecStrip,
@@ -36,46 +32,13 @@ import {
 
 export default function Dashboard() {
   const db = useDb();
-  const cars = useLiveQuery(vehiclesQuery(db));
-  const selected = useLiveQuery(selectedVehicleIdQuery(db));
-  const failed = cars.error ?? selected.error;
-  if (failed) throw failed;
-  // First reads still running: [] here doesn't mean "no vehicle" yet.
-  if (!cars.updatedAt || !selected.updatedAt) return null;
-  // No pref (upgrade) or a removed car: fall back to the oldest.
-  const vehicle = cars.data.find((v) => v.id === selected.data[0]?.value) ?? cars.data[0];
+  const vehicle = useCurrentVehicle(db);
+  if (vehicle === undefined) return null;
   if (!vehicle) return <Redirect href="/onboarding" />;
 
-  return (
-    <>
-      <Stack.Screen
-        options={{
-          title: vehicle.nickname,
-          headerTitle: () => <CarSwitcher nickname={vehicle.nickname} />,
-        }}
-      />
-      {/* Keyed: useLiveQuery keeps the previous car's data while it reloads, so a fresh mount
-          waits for the new car instead of rolling the drums between two cars' numbers. */}
-      <Garage key={vehicle.id} vehicle={vehicle} />
-    </>
-  );
-}
-
-function CarSwitcher({ nickname }: { nickname: string }) {
-  const { c } = useTheme();
-  return (
-    <Pressable
-      onPress={() => router.push('/vehicles')}
-      accessibilityRole="button"
-      accessibilityLabel={`Trocar de carro. Atual: ${nickname}`}
-      style={({ pressed }) => [styles.switcher, pressed && styles.pressed]}
-    >
-      <AppText variant="title" numberOfLines={1} style={styles.shrink}>
-        {nickname}
-      </AppText>
-      <Icon name="chevron-down" size={20} color={c.primary} />
-    </Pressable>
-  );
+  // Keyed: useLiveQuery keeps the previous car's data while it reloads, so a fresh mount
+  // waits for the new car instead of rolling the drums between two cars' numbers.
+  return <Garage key={vehicle.id} vehicle={vehicle} />;
 }
 
 function Garage({ vehicle }: { vehicle: typeof vehicles.$inferSelect }) {
@@ -134,24 +97,21 @@ function Garage({ vehicle }: { vehicle: typeof vehicles.$inferSelect }) {
 
   return (
     <Screen
+      tab
       scroll
       footer={
         <Button
           variant="secondary"
-          label="Ver histórico"
-          onPress={() => router.push({ pathname: '/history', params })}
+          label="Ajustar KM"
+          onPress={() => router.push({ pathname: '/adjust-km', params })}
         />
       }
     >
+      <View style={styles.plate}>
+        <PlateChip nickname={vehicle.nickname} onPress={() => router.push('/vehicles')} />
+      </View>
       <View style={styles.block}>
         <Odometer km={projectOdometer(readings.data, vehicle.monthlyKmEstimate, today)} estimated />
-        <View style={styles.start}>
-          <Button
-            variant="quiet"
-            label="Ajustar KM"
-            onPress={() => router.push({ pathname: '/adjust-km', params })}
-          />
-        </View>
         {isProjectionStale(readings.data, today) ? (
           <AppText color="inkMuted">
             Faz mais de 30 dias que o KM não é atualizado. Ajuste para melhorar as previsões.
@@ -235,8 +195,6 @@ const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 const styles = StyleSheet.create({
   block: { gap: space.s, marginBottom: space.xxl },
   start: { alignItems: 'flex-start' },
-  switcher: { flexDirection: 'row', alignItems: 'center', gap: space.xs, minHeight: 48 },
-  shrink: { flexShrink: 1 },
+  plate: { marginBottom: space.xl },
   edit: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
-  pressed: { opacity: 0.82 },
 });
