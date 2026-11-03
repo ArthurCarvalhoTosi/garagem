@@ -23,3 +23,4 @@ export type { Telltale } from './InstrumentPanel';
 export { MonthBars } from './MonthBars';
 export type { MonthBar } from './MonthBars';
 export { TimelineRow } from './TimelineRow';
+export { Notice } from './Notice';

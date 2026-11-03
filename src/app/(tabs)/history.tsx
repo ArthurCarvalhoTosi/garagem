@@ -1,11 +1,9 @@
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
-import { Image } from 'expo-image';
 import { Redirect, router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
-import { deleteRemovedPhotos, hasPhoto, readPhoto } from '@/attachments';
+import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useDb } from '@/db/provider';
-import { itemsQuery, logsQuery, readingsQuery, removeMaintenance } from '@/db/repo';
+import { itemsQuery, logsQuery, readingsQuery } from '@/db/repo';
 import type { vehicles } from '@/db/schema';
 import { useCurrentVehicle } from '@/db/useCurrentVehicle';
 import {
@@ -25,7 +23,6 @@ import {
   projectOdometer,
   timingLabel,
   todayISO,
-  ValidationError,
   type FeedEntry,
   type ISODate,
   type LogFacts,
@@ -33,7 +30,6 @@ import {
 import {
   AppText,
   Button,
-  FormError,
   Icon,
   MonthBars,
   PlateChip,
@@ -70,7 +66,6 @@ function CarHistory({ vehicle }: { vehicle: typeof vehicles.$inferSelect }) {
   const logs = useLiveQuery(logsQuery(db, vehicle.id), [vehicle.id]);
   const readings = useLiveQuery(readingsQuery(db, vehicle.id), [vehicle.id]);
   const items = useLiveQuery(itemsQuery(db, vehicle.id), [vehicle.id]);
-  const [error, setError] = useState<unknown>(null);
   const [showLater, setShowLater] = useState(false);
   // State, not computed per render: the compiler would reuse a stale value until the queries change.
   const [today] = useState(todayISO);
@@ -110,32 +105,6 @@ function CarHistory({ vehicle }: { vehicle: typeof vehicles.$inferSelect }) {
   const register = (itemId: string) => router.push({ pathname: '/register', params: { itemId } });
   const edit = (log: Log) =>
     router.push({ pathname: '/register', params: { vehicleId: vehicle.id, logId: log.id } });
-
-  const remove = (log: Log) => {
-    const gone = log.photo
-      ? 'O registro e a foto do comprovante serão apagados deste aparelho.'
-      : 'O registro será apagado deste aparelho.';
-    Alert.alert(
-      'Excluir esta troca?',
-      `${nameOf(log)}, ${formatDate(log.performedAt)}. ${gone} Isso não pode ser desfeito.`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Excluir',
-          style: 'destructive',
-          onPress: async () => {
-            setError(null);
-            try {
-              await removeMaintenance(db, log.id);
-              deleteRemovedPhotos(db);
-            } catch (e) {
-              setError(e);
-            }
-          },
-        },
-      ],
-    );
-  };
 
   const futureRow = (entry: Entry) => (
     <TimelineRow
@@ -209,7 +178,6 @@ function CarHistory({ vehicle }: { vehicle: typeof vehicles.$inferSelect }) {
       ) : null}
 
       <Section title="Linha do tempo">
-        <FormError error={error} />
         {later.length > 0 ? (
           <TimelineRow rail="forecast">
             <View style={styles.start}>
@@ -257,14 +225,8 @@ function CarHistory({ vehicle }: { vehicle: typeof vehicles.$inferSelect }) {
                 </View>
               </TimelineRow>
               {y.logs.map((log) => (
-                // Keyed on the photo too: a replaced photo starts closed instead of showing the old one.
-                <TimelineRow key={`${log.id}:${log.photo}`} rail="done" node="filled">
-                  <LogRow
-                    log={log}
-                    facts={facts.get(log.id)}
-                    onEdit={() => edit(log)}
-                    onRemove={() => remove(log)}
-                  />
+                <TimelineRow key={log.id} rail="done" node="filled">
+                  <LogRow log={log} facts={facts.get(log.id)} onPress={() => edit(log)} />
                 </TimelineRow>
               ))}
             </View>
@@ -332,6 +294,9 @@ function ForecastStop({
 
 function Totals({ logs, readings, today }: { logs: Log[]; readings: Reading[]; today: ISODate }) {
   const { c } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  // Three columns of money don't fit at large text sizes: stack them instead of breaking numbers.
+  const stacked = fontScale > 1.3;
   const cost = costSummary(logs, readings, today);
   // Read like a trip computer: value on top, what it measures below. Spoken label first.
   const readouts = [
@@ -353,13 +318,16 @@ function Totals({ logs, readings, today }: { logs: Log[]; readings: Reading[]; t
           {count === 1 ? '1 troca registrada' : `${count} trocas registradas`}
         </AppText>
       </View>
-      <View style={[styles.readouts, { borderColor: c.line }]}>
+      <View style={[styles.readouts, stacked && styles.stacked, { borderColor: c.line }]}>
         {readouts.map((r, i) => (
           <View
             key={r.label}
             accessible
             accessibilityLabel={`${r.spoken}: ${formatBRL(r.cents)}`}
-            style={[styles.readout, i > 0 && { ...styles.divided, borderLeftColor: c.line }]}
+            style={[
+              styles.readout,
+              i > 0 && !stacked && { ...styles.divided, borderLeftColor: c.line },
+            ]}
           >
             <AppText variant="number">{formatBRL(r.cents)}</AppText>
             <AppText variant="caption" color="inkMuted">
@@ -392,109 +360,73 @@ function yearSummary(logs: Log[]) {
 
 const nameOf = (log: Log) => log.itemName ?? 'Manutenção';
 
+/** One record: tapping it opens the register sheet, where it can be edited, its photo seen or deleted. */
 function LogRow({
   log,
   facts,
-  onEdit,
-  onRemove,
+  onPress,
 }: {
   log: Log;
   facts: LogFacts | undefined;
-  onEdit: () => void;
-  onRemove: () => void;
+  onPress: () => void;
 }) {
   const { c } = useTheme();
-  const [open, setOpen] = useState(false);
-  // Decrypted photo, in memory only while this row is on screen.
-  const [photo, setPhoto] = useState<string | null>(null);
-  const [photoError, setPhotoError] = useState<unknown>(null);
   // createdAt is a UTC timestamp; compare its local calendar day with the service date.
   const registeredOn = todayISO(new Date(log.createdAt));
-  const what = `${nameOf(log)} de ${formatDate(log.performedAt)}`;
-
-  const togglePhoto = async () => {
-    if (open || !log.photo) return setOpen(false);
-    setOpen(true);
-    if (photo) return;
-    setPhotoError(null);
-    // A photo from another phone downloads after its row: the next sync brings it.
-    if (!hasPhoto(log.photo)) {
-      return setPhotoError(
-        new ValidationError('A foto ainda está vindo da nuvem. Tente de novo daqui a pouco.'),
-      );
-    }
-    try {
-      setPhoto(await readPhoto(log.photo));
-    } catch {
-      setPhotoError(new ValidationError('Não foi possível abrir a foto. Tente de novo.'));
-    }
-  };
+  const lines = [
+    `${formatDate(log.performedAt)} · ${formatKm(log.km)}`,
+    log.brandSpec,
+    log.notes,
+    registeredOn !== log.performedAt ? `Registrado em ${formatDate(registeredOn)}` : null,
+  ];
+  const chips: { icon: IconName; label: string; color?: 'ok' | 'attention' }[] = [];
+  if (facts?.timing) {
+    chips.push(
+      facts.timing.late
+        ? { icon: 'alert', label: timingLabel(facts.timing), color: 'attention' }
+        : { icon: 'check-circle-outline', label: timingLabel(facts.timing), color: 'ok' },
+    );
+  }
+  if (facts && log.itemId) chips.push({ icon: 'ruler', label: gapLabel(facts.gap) });
+  if (log.photo) chips.push({ icon: 'receipt', label: 'Com comprovante' });
+  const cost = log.costCents != null ? formatBRL(log.costCents) : null;
 
   return (
-    <View style={[styles.row, { borderBottomColor: c.line }]}>
-      <View style={styles.main}>
-        <View accessible style={styles.info}>
-          <View style={styles.nameRow}>
-            <AppText variant="bodyStrong" style={styles.shrink}>
-              {nameOf(log)}
-            </AppText>
-            {log.costCents != null ? (
-              <AppText variant="number">{formatBRL(log.costCents)}</AppText>
-            ) : null}
-          </View>
-          <AppText>{`${formatDate(log.performedAt)} · ${formatKm(log.km)}`}</AppText>
-          {log.brandSpec ? <AppText color="inkMuted">{log.brandSpec}</AppText> : null}
-          {log.notes ? <AppText color="inkMuted">{log.notes}</AppText> : null}
-          {registeredOn !== log.performedAt ? (
-            <AppText variant="caption" color="inkMuted">
-              {`Registrado em ${formatDate(registeredOn)}`}
-            </AppText>
-          ) : null}
-          <View style={styles.chips}>
-            {facts?.timing ? (
-              <Chip
-                icon={facts.timing.late ? 'alert' : 'check-circle-outline'}
-                color={facts.timing.late ? 'attention' : 'ok'}
-                label={timingLabel(facts.timing)}
-              />
-            ) : null}
-            {facts && log.itemId ? <Chip icon="ruler" label={gapLabel(facts.gap)} /> : null}
-            {log.photo ? <Chip icon="receipt" label="Com comprovante" /> : null}
-          </View>
-        </View>
-        <IconButton icon="pencil" label={`Editar ${what}`} onPress={onEdit} />
-        <IconButton icon="trash-can-outline" label={`Excluir ${what}`} onPress={onRemove} />
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={[nameOf(log), cost, ...lines, ...chips.map((ch) => ch.label)]
+        .filter(Boolean)
+        .join('. ')}
+      accessibilityHint="Abre para editar ou excluir"
+      style={({ pressed }) => [
+        styles.row,
+        { borderBottomColor: c.line },
+        pressed && { backgroundColor: c.line },
+      ]}
+    >
+      <View style={styles.nameRow}>
+        <AppText variant="bodyStrong" style={styles.shrink}>
+          {nameOf(log)}
+        </AppText>
+        {cost ? <AppText variant="number">{cost}</AppText> : null}
       </View>
-      {log.photo ? (
-        <View style={styles.start}>
-          <Button
-            variant="quiet"
-            label={open ? 'Ocultar foto' : 'Ver foto'}
-            accessibilityLabel={`${open ? 'Ocultar' : 'Ver'} foto do comprovante de ${what}`}
-            expanded={open}
-            onPress={togglePhoto}
-          />
+      <AppText>{lines[0]}</AppText>
+      {log.brandSpec ? <AppText color="inkMuted">{log.brandSpec}</AppText> : null}
+      {log.notes ? <AppText color="inkMuted">{log.notes}</AppText> : null}
+      {lines[3] ? (
+        <AppText variant="caption" color="inkMuted">
+          {lines[3]}
+        </AppText>
+      ) : null}
+      {chips.length > 0 ? (
+        <View style={styles.chips}>
+          {chips.map((ch) => (
+            <Chip key={ch.label} icon={ch.icon} label={ch.label} color={ch.color} />
+          ))}
         </View>
       ) : null}
-      {open ? (
-        photo ? (
-          <Image
-            source={{ uri: `data:image/jpeg;base64,${photo}` }}
-            // Decrypted: never into the image cache on disk.
-            cachePolicy="none"
-            contentFit="contain"
-            accessible
-            accessibilityRole="image"
-            accessibilityLabel={`Foto do comprovante de ${what}`}
-            style={[styles.photo, { backgroundColor: c.surface, borderColor: c.line }]}
-          />
-        ) : photoError ? (
-          <FormError error={photoError} />
-        ) : (
-          <AppText color="inkMuted">Abrindo a foto…</AppText>
-        )
-      ) : null}
-    </View>
+    </Pressable>
   );
 }
 
@@ -519,28 +451,6 @@ function Chip({
   );
 }
 
-function IconButton({
-  icon,
-  label,
-  onPress,
-}: {
-  icon: IconName;
-  label: string;
-  onPress: () => void;
-}) {
-  const { c } = useTheme();
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      style={({ pressed }) => [styles.iconButton, pressed && { backgroundColor: c.line }]}
-    >
-      <Icon name={icon} size={24} color={c.inkMuted} />
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   top: { gap: space.l, marginBottom: space.xl },
   titleRow: {
@@ -558,6 +468,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     paddingVertical: space.m,
   },
+  stacked: { flexDirection: 'column', gap: space.m },
   readout: { flex: 1, gap: space.xs, paddingRight: space.m },
   divided: { borderLeftWidth: 1, paddingLeft: space.m },
   forecast: { gap: space.m },
@@ -587,8 +498,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   row: { gap: space.xs, paddingVertical: space.m, borderBottomWidth: 1 },
-  main: { flexDirection: 'row', alignItems: 'flex-start' },
-  info: { flex: 1, gap: space.xs },
   nameRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -606,7 +515,5 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: radius.plaque,
   },
-  iconButton: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   start: { alignItems: 'flex-start' },
-  photo: { height: 320, borderWidth: 1, borderRadius: radius.plaque },
 });
