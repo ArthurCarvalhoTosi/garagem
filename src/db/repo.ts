@@ -9,6 +9,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  like,
   lte,
   min,
   ne,
@@ -241,6 +242,39 @@ export async function answerNotificationPrompt(db: Db): Promise<void> {
 export async function selectVehicle(db: Db, vehicleId: string): Promise<void> {
   assertVehicle(db, vehicleId);
   setSelectedVehicle(db, vehicleId);
+}
+
+// --- Backup reminder (device-local) ---
+
+const BACKUP_LAST = 'backup:lastAt';
+const BACKUP_SNOOZE = 'backup:snoozedUntil';
+
+/** This phone's last backup and the reminder's snooze, as `backup:*` rows. */
+export function backupPrefsQuery(db: Db) {
+  return db
+    .select({ key: devicePrefs.key, value: devicePrefs.value })
+    .from(devicePrefs)
+    .where(like(devicePrefs.key, 'backup:%'));
+}
+
+export function readBackupPrefs(rows: { key: string; value: string }[]) {
+  const get = (key: string) => rows.find((r) => r.key === key)?.value ?? null;
+  return { lastBackupAt: get(BACKUP_LAST), snoozedUntil: get(BACKUP_SNOOZE) };
+}
+
+function setPref(db: Db, key: string, value: string) {
+  db.insert(devicePrefs)
+    .values({ key, value })
+    .onConflictDoUpdate({ target: devicePrefs.key, set: { value } })
+    .run();
+}
+
+export async function recordBackup(db: Db, today: ISODate): Promise<void> {
+  setPref(db, BACKUP_LAST, today);
+}
+
+export async function snoozeBackupReminder(db: Db, until: ISODate): Promise<void> {
+  setPref(db, BACKUP_SNOOZE, until);
 }
 
 // --- Cloud session storage (device-local: never synced nor in backups) ---

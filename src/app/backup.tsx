@@ -4,6 +4,7 @@ import type { File } from 'expo-file-system';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { createBackupFile, MIN_PASSWORD } from '@/backup';
+import { recordBackup } from '@/db/repo';
 import { useDb } from '@/db/provider';
 import { todayISO } from '@/domain';
 import { AppText, Button, FormError, Screen, Section, TextField, space } from '@/ui';
@@ -36,6 +37,9 @@ export default function Backup() {
         mimeType: 'application/octet-stream',
         dialogTitle: 'Salvar backup',
       });
+      // shortcut: Android can't tell a saved file from a dismissed share sheet, so both count as
+      // a backup; ask the person to confirm if reminders stop when they shouldn't.
+      await recordBackup(db, todayISO());
       router.back();
     } catch (e) {
       setError(e);
