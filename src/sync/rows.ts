@@ -1,7 +1,14 @@
 // Each synced row travels as AES-256-GCM ciphertext under the user's data key (DEK). The table
 // and id ride along as associated data: the server can't pass one row off as another.
 import { AESEncryptionKey, AESSealedData, aesDecryptAsync, aesEncryptAsync } from 'expo-crypto';
-import { isSyncTable, sharedRow, SYNC_TABLES, type SyncRow, type SyncTable } from '@/db/sync';
+import {
+  DATA_SCHEMA,
+  isSyncTable,
+  sharedRow,
+  SYNC_TABLES,
+  type SyncRow,
+  type SyncTable,
+} from '@/db/sync';
 
 /** A row as the server keeps it: only the envelope is readable there. */
 export type SealedRow = {
@@ -40,7 +47,9 @@ export function importDataKey(base64: string): Promise<AESEncryptionKey> {
 
 export async function sealRow(key: AESEncryptionKey, r: SyncRow): Promise<SealedRow> {
   const sealed = await aesEncryptAsync(
-    asciiBytes(asciiJson({ v: ENVELOPE_VERSION, row: sharedRow(r.table, r.row) })),
+    asciiBytes(
+      asciiJson({ v: ENVELOPE_VERSION, schema: DATA_SCHEMA, row: sharedRow(r.table, r.row) }),
+    ),
     key,
     {
       additionalData: aad(r.table, r.id),
@@ -59,12 +68,13 @@ export async function sealRow(key: AESEncryptionKey, r: SyncRow): Promise<Sealed
 
 /**
  * Opens a row from the server, or null when it can't be trusted: wrong key, tampered bytes,
- * or contents that don't match the envelope (a row claiming another id or time).
+ * or contents that don't match the envelope (a row claiming another id or time). `schema` is
+ * the data schema of the app that sealed it (0 for rows sealed before it was recorded).
  */
 export async function openRow(
   key: AESEncryptionKey,
   s: Omit<SealedRow, 'table'> & { table: string },
-): Promise<SyncRow | null> {
+): Promise<(SyncRow & { schema: number }) | null> {
   if (!isSyncTable(s.table)) return null;
   let plain: Uint8Array;
   try {
@@ -83,8 +93,9 @@ export async function openRow(
     return null;
   }
   if (typeof envelope !== 'object' || envelope === null) return null;
-  const { v, row } = envelope as { v?: unknown; row?: unknown };
+  const { v, schema = 0, row } = envelope as { v?: unknown; schema?: unknown; row?: unknown };
   if (v !== ENVELOPE_VERSION || typeof row !== 'object' || row === null) return null;
+  if (!Number.isInteger(schema)) return null;
   const r = row as Record<string, unknown>;
   if (r[SYNC_TABLES[s.table].keyName] !== s.id || r.updatedAt !== s.updatedAt) return null;
   return {
@@ -93,5 +104,6 @@ export async function openRow(
     updatedAt: s.updatedAt,
     deletedAt: (r.deletedAt as string | null) ?? null,
     row: r,
+    schema: schema as number,
   };
 }

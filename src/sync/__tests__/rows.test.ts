@@ -1,5 +1,6 @@
-import { AESEncryptionKey } from 'expo-crypto';
-import type { SyncRow } from '@/db/sync';
+import { AESEncryptionKey, aesEncryptAsync } from 'expo-crypto';
+import * as localSync from '@/db/sync';
+import { DATA_SCHEMA, type SyncRow } from '@/db/sync';
 import { fromByteaHex, isoMs, toByteaHex } from '../remote';
 import { openRow, sealRow } from '../rows';
 
@@ -28,7 +29,37 @@ test('seal then open gives the row back, accents and emoji included', async () =
   const sealed = await sealRow(key, row);
   expect(sealed).toMatchObject({ table: 'vehicles', id: ID, keyVersion: 1, deletedAt: null });
   expect(sealed.nonce).toHaveLength(12);
-  expect(await openRow(key, sealed)).toEqual(row);
+  expect(await openRow(key, sealed)).toEqual({ ...row, schema: DATA_SCHEMA });
+});
+
+test('the envelope says which data schema sealed it', async () => {
+  expect(DATA_SCHEMA).toBeGreaterThan(0);
+  const newerApp = jest.replaceProperty(localSync, 'DATA_SCHEMA', DATA_SCHEMA + 1);
+  const sealed = await sealRow(key, row);
+  newerApp.restore();
+  expect((await openRow(key, sealed))?.schema).toBe(DATA_SCHEMA + 1);
+});
+
+test('rows sealed before the schema was recorded open as schema 0; a bad one is refused', async () => {
+  const sealedWith = async (envelope: object) => {
+    const text = JSON.stringify(envelope);
+    const sealed = await aesEncryptAsync(
+      Uint8Array.from(text, (c) => c.charCodeAt(0)),
+      key,
+      {
+        additionalData: Uint8Array.from(`garagem/row/v1:vehicles:${ID}`, (c) => c.charCodeAt(0)),
+      },
+    );
+    const good = await sealRow(key, row);
+    return {
+      ...good,
+      ciphertext: await sealed.ciphertext({ includeTag: true }),
+      nonce: await sealed.iv(),
+    };
+  };
+  const plain = { ...row.row, nickname: 'Fusca' };
+  expect((await openRow(key, await sealedWith({ v: 1, row: plain })))?.schema).toBe(0);
+  expect(await openRow(key, await sealedWith({ v: 1, schema: '9', row: plain }))).toBeNull();
 });
 
 test('the server cannot pass a row off as another table or id', async () => {

@@ -11,9 +11,9 @@ import {
   getRandomBytes,
 } from 'expo-crypto';
 import { File, Paths } from 'expo-file-system';
-import migrations from '../../drizzle/migrations';
 import { readPhoto, writePhoto } from '@/attachments';
 import type { Db } from '@/db/client';
+import { DATA_SCHEMA as SCHEMA } from '@/db/sync';
 import { backupRows, replaceAllData, type BackupRows } from '@/db/repo';
 import { ValidationError, type ISODate } from '@/domain';
 
@@ -22,8 +22,6 @@ const VERSION = 1;
 // OWASP's Argon2id minimum (19 MiB, 2 passes). Pure JS on the phone: a few seconds, once per file.
 const KDF = { name: 'argon2id', m: 19456, t: 2, p: 1 } as const;
 export const MIN_PASSWORD = 8;
-// Migrations the running app knows; a backup from a newer schema can't be inserted safely.
-const SCHEMA = migrations.journal.entries.length;
 
 type Header = { format: string; version: number; kdf: typeof KDF & { salt: string } };
 
