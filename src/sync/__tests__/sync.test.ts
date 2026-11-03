@@ -24,6 +24,7 @@ function fakeServer() {
   const photos = new Map<string, Uint8Array>();
   let clock = Date.parse('2026-10-20T12:00:00.000Z');
   const remote: Remote = {
+    async logAccess() {},
     async pull(since) {
       return [...rows.values()]
         .filter((r) => !since || Date.parse(r.serverUpdatedAt) > Date.parse(since))
@@ -173,6 +174,20 @@ test('rows sealed with another key, or tampered, are skipped and the rest lands'
     pulled: 0,
     skipped: 3,
   });
+});
+
+test('every run records the access first; without it no data moves', async () => {
+  await createVehicle(phoneA, { nickname: 'Meu Sandero', ...NEW_CAR }, '2026-10-01');
+  const logAccess = jest.spyOn(server.remote, 'logAccess');
+  const pull = jest.spyOn(server.remote, 'pull');
+  await syncOnce(phoneA, server.remote, key, photosOf(phoneA));
+  expect(logAccess.mock.invocationCallOrder[0]).toBeLessThan(pull.mock.invocationCallOrder[0]);
+
+  logAccess.mockRejectedValueOnce(new Error('offline'));
+  await renameVehicle(phoneA, vehiclesQuery(phoneA).all()[0].id, 'Velho');
+  await expect(syncOnce(phoneA, server.remote, key, photosOf(phoneA))).rejects.toThrow('offline');
+  expect(pull).toHaveBeenCalledTimes(1);
+  expect(await syncOnce(phoneA, server.remote, key, photosOf(phoneA))).toMatchObject({ pushed: 1 });
 });
 
 test('a failed upload leaves the rows pending for the next run', async () => {

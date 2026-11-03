@@ -22,6 +22,8 @@ export { importDataKey } from './rows';
 export type { SealedRow } from './rows';
 
 export interface Remote {
+  /** Records this access (IP, date and time) for the Marco Civil, before any data moves. */
+  logAccess(): Promise<void>;
   /** Every row the server changed after `since` (server clock), or all rows when null. */
   pull(since: string | null): Promise<(Omit<SealedRow, 'table'> & { table: string })[]>;
   /** Upserts rows; the server keeps the newer copy of each. */
@@ -58,6 +60,7 @@ export async function syncOnce(
   key: AESEncryptionKey,
   photos: LocalPhotos,
 ): Promise<SyncResult> {
+  await remote.logAccess();
   const cursor = readSyncPref(db, 'pullCursor');
   const since = cursor ? new Date(Date.parse(cursor) - PULL_OVERLAP_MS).toISOString() : null;
 

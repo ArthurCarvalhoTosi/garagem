@@ -7,7 +7,7 @@ begin;
 set local role postgres;
 set local search_path = extensions, public;
 create extension if not exists pgtap with schema extensions;
-select plan(52);
+select plan(62);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-00000000000a', 'a@test.local'),
@@ -24,7 +24,8 @@ $$;
 select ok(
   (select bool_and(relrowsecurity) from pg_class
    where oid in ('public.sync_records'::regclass, 'public.user_keys'::regclass,
-                 'public.dossier_shares'::regclass, 'public.dossier_opens'::regclass)),
+                 'public.dossier_shares'::regclass, 'public.dossier_opens'::regclass,
+                 'public.access_log'::regclass)),
   'RLS is enabled on every v1 table'
 );
 
@@ -315,9 +316,58 @@ select is(
    where name = '00000000-0000-0000-0000-00000000000a/66666666-6666-6666-6666-666666666666.bin'),
   0, '... and it is gone');
 
+-- Access records (Marco Civil) -------------------------------------------------------------
+
+set local role anon;
+select throws_ok('select public.log_access()', '42501', null, 'anon cannot log an access');
+set local role postgres;
+
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select set_config('request.headers', '{"x-forwarded-for": "203.0.113.7, 10.0.0.1"}', true);
+select lives_ok('select public.log_access()', 'a signed-in user logs an access');
+select lives_ok('select public.log_access()', '... and again right after');
+select throws_ok('select * from public.access_log', '42501', null,
+  '... but cannot read the records');
+select throws_ok($$ delete from public.access_log $$, '42501', null,
+  '... nor delete them');
+set local role postgres;
+
+select is(
+  (select array_agg(forwarded_for) from public.access_log
+   where user_id = '00000000-0000-0000-0000-00000000000a'),
+  array['203.0.113.7, 10.0.0.1'],
+  'calls close together from one address stretch a single record');
+
+update public.access_log set first_at = now() - interval '20 minutes',
+  last_at = now() - interval '11 minutes'
+where user_id = '00000000-0000-0000-0000-00000000000a';
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select public.log_access();
+select set_config('request.headers', '{"x-forwarded-for": "198.51.100.2"}', true);
+select public.log_access();
+select set_config('request.headers', '{}', true);
+select public.log_access();
+set local role postgres;
+
+select is(
+  (select array_agg(forwarded_for order by id) from public.access_log
+   where user_id = '00000000-0000-0000-0000-00000000000a'),
+  array['203.0.113.7, 10.0.0.1', '203.0.113.7, 10.0.0.1', '198.51.100.2', 'unknown'],
+  'a pause over 10 minutes or another address starts a new record');
+
+select is((select schedule from cron.job where jobname = 'access-log-cleanup'), '17 3 * * *',
+  'access records are purged daily');
+select ok((select command like '%6 months%' from cron.job where jobname = 'access-log-cleanup'),
+  '... once they are 6 months old');
+
 -- Account deletion ------------------------------------------------------------------------
 
 delete from auth.users where id = '00000000-0000-0000-0000-00000000000a';
+
+select is(
+  (select count(*)::int from public.access_log
+   where user_id = '00000000-0000-0000-0000-00000000000a'),
+  4, 'access records outlive the account, as the Marco Civil requires');
 
 -- Only this user's rows: other local runs (the sync e2e test) may have left their own.
 select is(

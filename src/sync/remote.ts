@@ -61,6 +61,11 @@ export function supabaseRemote(sb: SupabaseClient): Remote {
   };
 
   return {
+    async logAccess() {
+      const { error } = await sb.rpc('log_access');
+      if (error) throw new Error(`access log failed: ${error.code}`);
+    },
+
     async pull(since) {
       const out: Awaited<ReturnType<Remote['pull']>> = [];
       for (let from = 0; ; from += PAGE) {
