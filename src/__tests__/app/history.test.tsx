@@ -56,13 +56,14 @@ test('shows the total spent and a reverse timeline, flagging late records', asyn
   await render(<History />);
 
   expect(screen.getByText('Total gasto em manutenção')).toBeOnTheScreen();
-  expect(screen.getByText(formatBRL(20050))).toBeOnTheScreen();
+  // The total comes first; the 12-month readout shows the same amount here.
+  expect(screen.getAllByText(formatBRL(20050))[0]).toBeOnTheScreen();
   expect(screen.getByText('3 trocas registradas')).toBeOnTheScreen();
   expect(
-    screen.getByText(`Últimos 12 meses: ${formatBRL(20050)}`, { exact: false }),
+    screen.getByLabelText(`Gasto nos últimos 12 meses: ${formatBRL(20050)}`),
   ).toBeOnTheScreen();
   // 60 days of readings: too few for a per-km figure.
-  expect(screen.queryByText(/Custo por km/)).toBeNull();
+  expect(screen.queryByText('Por km')).toBeNull();
   expect(screen.getByText('Mobil 5W-30')).toBeOnTheScreen();
 
   const dates = screen.getAllByText(/ · .* km$/).map((t) => t.props.children);
@@ -92,7 +93,7 @@ test('shows the cost per km once readings cover a few months', async () => {
 
   await render(<History />);
   // R$ 300 over 6.000 km.
-  expect(screen.getByText(`Custo por km: ${formatBRL(5)}`)).toBeOnTheScreen();
+  expect(screen.getByLabelText(`Custo por km: ${formatBRL(5)}`)).toBeOnTheScreen();
 });
 
 test('opens the PDF export for this car', async () => {

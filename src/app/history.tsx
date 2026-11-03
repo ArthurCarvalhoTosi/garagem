@@ -24,6 +24,7 @@ type Log = ReturnType<ReturnType<typeof logsQuery>['all']>[number];
 
 export default function History() {
   const db = useDb();
+  const { c } = useTheme();
   const { vehicleId } = useLocalSearchParams<{ vehicleId: string }>();
   const [vehicle] = useState(() =>
     vehiclesQuery(db)
@@ -56,6 +57,14 @@ export default function History() {
   }
 
   const cost = costSummary(logs.data, readings.data ?? [], todayISO());
+  // Read like a trip computer: value on top, what it measures below. Spoken label first.
+  const readouts = [
+    { label: 'Este ano', spoken: 'Gasto este ano', cents: cost.thisYear },
+    { label: 'Últimos 12 meses', spoken: 'Gasto nos últimos 12 meses', cents: cost.last12Months },
+    ...(cost.perKm === null
+      ? []
+      : [{ label: 'Por km', spoken: 'Custo por km', cents: cost.perKm }]),
+  ];
   const count = logs.data.length;
 
   const edit = (log: Log) =>
@@ -105,12 +114,21 @@ export default function History() {
         <AppText color="inkMuted">
           {count === 1 ? '1 troca registrada' : `${count} trocas registradas`}
         </AppText>
-        <AppText color="inkMuted">
-          Este ano: {formatBRL(cost.thisYear)} · Últimos 12 meses: {formatBRL(cost.last12Months)}
-        </AppText>
-        {cost.perKm !== null && (
-          <AppText color="inkMuted">Custo por km: {formatBRL(cost.perKm)}</AppText>
-        )}
+      </View>
+      <View style={[styles.readouts, { borderColor: c.line }]}>
+        {readouts.map((r, i) => (
+          <View
+            key={r.label}
+            accessible
+            accessibilityLabel={`${r.spoken}: ${formatBRL(r.cents)}`}
+            style={[styles.readout, i > 0 && { ...styles.divided, borderLeftColor: c.line }]}
+          >
+            <AppText variant="number">{formatBRL(r.cents)}</AppText>
+            <AppText variant="caption" color="inkMuted">
+              {r.label}
+            </AppText>
+          </View>
+        ))}
       </View>
 
       <Section title="Trocas">
@@ -241,7 +259,16 @@ function IconButton({
 
 const styles = StyleSheet.create({
   empty: { gap: space.xl },
-  total: { gap: space.xs, marginBottom: space.xxl },
+  total: { gap: space.xs, marginBottom: space.l },
+  readouts: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    paddingVertical: space.m,
+    marginBottom: space.xxl,
+  },
+  readout: { flex: 1, gap: space.xs, paddingRight: space.m },
+  divided: { borderLeftWidth: 1, paddingLeft: space.m },
   row: { gap: space.xs, paddingVertical: space.m, borderBottomWidth: 1 },
   main: { flexDirection: 'row', alignItems: 'flex-start' },
   info: { flex: 1, gap: space.xs },
