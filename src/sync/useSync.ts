@@ -8,7 +8,10 @@ import { isSyncTable, readSyncPref } from '@/db/sync';
 import { createSyncRunner, syncOnce } from '.';
 import { supabaseRemote } from './remote';
 
-export type SyncStatus = { state: 'idle' | 'syncing' | 'failed'; lastSyncAt: string | null };
+export type SyncStatus = {
+  state: 'idle' | 'syncing' | 'failed' | 'outdated';
+  lastSyncAt: string | null;
+};
 
 // Wait for a pause in edits (a log saves several rows) before uploading.
 const EDIT_PAUSE_MS = 3000;
@@ -50,8 +53,11 @@ export function useSync(db: Db) {
       if (!data.session) return;
       setStatus({ ...status, state: 'syncing' });
       try {
-        await syncOnce(db, supabaseRemote(sb), await dataKey(db), localPhotos);
-        setStatus({ state: 'idle', lastSyncAt: readSyncPref(db, 'lastSyncAt') });
+        const { outdated } = await syncOnce(db, supabaseRemote(sb), await dataKey(db), localPhotos);
+        setStatus({
+          state: outdated ? 'outdated' : 'idle',
+          lastSyncAt: readSyncPref(db, 'lastSyncAt'),
+        });
       } catch (e) {
         // Offline is routine; the next trigger retries. Never the payload or the key in logs.
         console.warn('sync failed:', e instanceof Error ? e.message : 'unknown');

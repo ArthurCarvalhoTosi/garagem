@@ -11,7 +11,8 @@ import {
   specsQuery,
   vehiclesQuery,
 } from '@/db/repo';
-import { clearSyncState, readSyncPref } from '@/db/sync';
+import * as localSync from '@/db/sync';
+import { clearSyncState, DATA_SCHEMA, readSyncPref } from '@/db/sync';
 import { createTestDb } from '@/db/test-utils/testDb';
 import { memoryPhotos } from '@/test-utils/photos';
 import { createSyncRunner, PULL_OVERLAP_MS, syncOnce, type Remote, type SealedRow } from '..';
@@ -86,6 +87,7 @@ test('a car made on one phone shows up on the other, sealed on the server', asyn
     pulled: 0,
     pushed: 3,
     skipped: 0,
+    outdated: false,
   });
   // Only ciphertext on the server: the nickname is nowhere in it.
   for (const r of server.rows.values())
@@ -95,6 +97,7 @@ test('a car made on one phone shows up on the other, sealed on the server', asyn
     pulled: 3,
     pushed: 0,
     skipped: 0,
+    outdated: false,
   });
   expect(nicknames(phoneB)).toEqual(['Meu Sandero']);
 });
@@ -132,6 +135,7 @@ test('a second sync with nothing new moves nothing', async () => {
     pulled: 0,
     pushed: 0,
     skipped: 0,
+    outdated: false,
   });
 });
 
@@ -188,6 +192,43 @@ test('every run records the access first; without it no data moves', async () =>
   await expect(syncOnce(phoneA, server.remote, key, photosOf(phoneA))).rejects.toThrow('offline');
   expect(pull).toHaveBeenCalledTimes(1);
   expect(await syncOnce(phoneA, server.remote, key, photosOf(phoneA))).toMatchObject({ pushed: 1 });
+});
+
+test('an old app stops uploading once a newer one wrote, and catches up after updating', async () => {
+  const id = await createVehicle(phoneA, { nickname: 'Meu Sandero', ...NEW_CAR }, '2026-10-01');
+  await syncOnce(phoneA, server.remote, key, photosOf(phoneA));
+  await syncOnce(phoneB, server.remote, key, photosOf(phoneB));
+
+  // Phone B runs a newer app (one more migration) and renames the car.
+  const newerApp = jest.replaceProperty(localSync, 'DATA_SCHEMA', DATA_SCHEMA + 1);
+  await renameVehicle(phoneB, id, 'Novo');
+  await syncOnce(phoneB, server.remote, key, photosOf(phoneB));
+  newerApp.restore();
+  const newest = () => server.rows.get(`vehicles:${id}`)!;
+  const fromB = newest().ciphertext;
+
+  // Phone A, still old: downloads, but its own edit stays on the phone.
+  expect(await syncOnce(phoneA, server.remote, key, photosOf(phoneA))).toMatchObject({
+    pulled: 1,
+    outdated: true,
+  });
+  expect(nicknames(phoneA)).toEqual(['Novo']);
+  await renameVehicle(phoneA, id, 'Velho');
+  expect(await syncOnce(phoneA, server.remote, key, photosOf(phoneA))).toMatchObject({
+    pushed: 0,
+    outdated: true,
+  });
+  expect(newest().ciphertext).toBe(fromB);
+
+  // Updated: the pending edit goes up.
+  const updated = jest.replaceProperty(localSync, 'DATA_SCHEMA', DATA_SCHEMA + 1);
+  expect(await syncOnce(phoneA, server.remote, key, photosOf(phoneA))).toMatchObject({
+    pushed: 1,
+    outdated: false,
+  });
+  await syncOnce(phoneB, server.remote, key, photosOf(phoneB));
+  expect(nicknames(phoneB)).toEqual(['Velho']);
+  updated.restore();
 });
 
 test('a failed upload leaves the rows pending for the next run', async () => {

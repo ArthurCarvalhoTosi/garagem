@@ -5,8 +5,8 @@ import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { deleteRemovedPhotos, hasPhoto, readPhoto } from '@/attachments';
 import { useDb } from '@/db/provider';
-import { logsQuery, removeMaintenance, vehiclesQuery } from '@/db/repo';
-import { formatBRL, formatDate, formatKm, todayISO, ValidationError } from '@/domain';
+import { logsQuery, readingsQuery, removeMaintenance, vehiclesQuery } from '@/db/repo';
+import { costSummary, formatBRL, formatDate, formatKm, todayISO, ValidationError } from '@/domain';
 import {
   AppText,
   Button,
@@ -31,6 +31,7 @@ export default function History() {
       .find((v) => v.id === vehicleId),
   );
   const logs = useLiveQuery(logsQuery(db, vehicle?.id ?? ''), [vehicle?.id]);
+  const readings = useLiveQuery(readingsQuery(db, vehicle?.id ?? ''), [vehicle?.id]);
   const [error, setError] = useState<unknown>(null);
 
   if (!vehicle) return <Redirect href="/" />;
@@ -54,7 +55,7 @@ export default function History() {
     );
   }
 
-  const total = logs.data.reduce((sum, l) => sum + (l.costCents ?? 0), 0);
+  const cost = costSummary(logs.data, readings.data ?? [], todayISO());
   const count = logs.data.length;
 
   const edit = (log: Log) =>
@@ -100,10 +101,16 @@ export default function History() {
         <AppText variant="caption" color="inkMuted">
           Total gasto em manutenção
         </AppText>
-        <AppText variant="number">{formatBRL(total)}</AppText>
+        <AppText variant="number">{formatBRL(cost.total)}</AppText>
         <AppText color="inkMuted">
           {count === 1 ? '1 troca registrada' : `${count} trocas registradas`}
         </AppText>
+        <AppText color="inkMuted">
+          Este ano: {formatBRL(cost.thisYear)} · Últimos 12 meses: {formatBRL(cost.last12Months)}
+        </AppText>
+        {cost.perKm !== null && (
+          <AppText color="inkMuted">Custo por km: {formatBRL(cost.perKm)}</AppText>
+        )}
       </View>
 
       <Section title="Trocas">

@@ -58,6 +58,11 @@ test('shows the total spent and a reverse timeline, flagging late records', asyn
   expect(screen.getByText('Total gasto em manutenção')).toBeOnTheScreen();
   expect(screen.getByText(formatBRL(20050))).toBeOnTheScreen();
   expect(screen.getByText('3 trocas registradas')).toBeOnTheScreen();
+  expect(
+    screen.getByText(`Últimos 12 meses: ${formatBRL(20050)}`, { exact: false }),
+  ).toBeOnTheScreen();
+  // 60 days of readings: too few for a per-km figure.
+  expect(screen.queryByText(/Custo por km/)).toBeNull();
   expect(screen.getByText('Mobil 5W-30')).toBeOnTheScreen();
 
   const dates = screen.getAllByText(/ · .* km$/).map((t) => t.props.children);
@@ -68,6 +73,26 @@ test('shows the total spent and a reverse timeline, flagging late records', asyn
   ]);
   // Logged today for earlier dates: two late records, the same-day one isn't flagged.
   expect(screen.getAllByText(`Registrado em ${formatDate(todayISO())}`)).toHaveLength(2);
+});
+
+test('shows the cost per km once readings cover a few months', async () => {
+  const start = addDays(todayISO(), -200);
+  const car = await seedVehicle(db, start, { nickname: 'Outro' });
+  params.vehicleId = car.vehicleId;
+  const log = (performedAt: string, km: number, costCents: number) =>
+    registerMaintenance(db, {
+      vehicleId: car.vehicleId,
+      itemId: car.oilId,
+      performedAt,
+      km,
+      costCents,
+    });
+  await log(addDays(start, 5), 40100, 10000);
+  await log(todayISO(), 46000, 20000);
+
+  await render(<History />);
+  // R$ 300 over 6.000 km.
+  expect(screen.getByText(`Custo por km: ${formatBRL(5)}`)).toBeOnTheScreen();
 });
 
 test('opens the PDF export for this car', async () => {
