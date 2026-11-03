@@ -20,3 +20,6 @@ export { ListRow } from './ListRow';
 export { PlateChip } from './PlateChip';
 export { InstrumentPanel } from './InstrumentPanel';
 export type { Telltale } from './InstrumentPanel';
+export { MonthBars } from './MonthBars';
+export type { MonthBar } from './MonthBars';
+export { TimelineRow } from './TimelineRow';

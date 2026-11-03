@@ -34,6 +34,8 @@ const glyphs = {
   'car-brake-alert': { ios: 'exclamationmark.brakesignal', android: 'error' },
   'timing-belt': { ios: 'gearshape.2', android: 'cycle' },
   wrench: { ios: 'wrench.and.screwdriver', android: 'build' },
+  receipt: { ios: 'doc.text', android: 'receipt_long' },
+  ruler: { ios: 'ruler', android: 'straighten' },
   account: { ios: 'person.crop.circle', android: 'account_circle' },
   backup: { ios: 'externaldrive.badge.plus', android: 'backup' },
   restore: { ios: 'arrow.counterclockwise', android: 'settings_backup_restore' },

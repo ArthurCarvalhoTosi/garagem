@@ -13,6 +13,7 @@ A identidade visual e seus motivos estão na seção 10 do doc de decisões (`..
 - No Painel, o `ItemRow` recebe `life` (fração do intervalo já usada, de `lifeUsed`) e troca a barra lateral pela barra de vida útil.
 - A `PlateChip` (apelido numa placa Mercosul) é branca nos dois temas, com tokens próprios (`plateBody`, `plateInk`, `plateBand`): uma placa não muda de cor.
 - Listas de lugares para ir (Ajustes) usam `ListRow`; listas de manutenção usam `ItemRow`.
+- A linha do tempo do Histórico monta cada parada com `TimelineRow` (trilho `forecast` claro ou `done` escuro, marcador vazio ou cheio). O gráfico de meses é o `MonthBars`: uma série, sem legenda, todos os valores no rótulo do leitor de tela.
 
 ## Acessibilidade (obrigatória)
 
