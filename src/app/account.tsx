@@ -141,6 +141,7 @@ export default function Account() {
 
 function syncLine(sync: SyncStatus): string {
   if (sync.state === 'syncing') return 'Sincronizando…';
+  if (sync.state === 'outdated') return 'Atualize o app para continuar sincronizando.';
   if (sync.state === 'failed')
     return 'Não foi possível sincronizar agora. O app tenta de novo sozinho.';
   if (!sync.lastSyncAt) return 'Seus dados ainda não foram para a nuvem.';
