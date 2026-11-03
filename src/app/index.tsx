@@ -19,6 +19,7 @@ import {
   projectOdometer,
   todayISO,
 } from '@/domain';
+import { BackupReminder } from '@/backup/BackupReminder';
 import { NotificationPrompt } from '@/notifications/NotificationPrompt';
 import {
   AppText,
@@ -201,6 +202,7 @@ function Garage({ vehicle }: { vehicle: typeof vehicles.$inferSelect }) {
         </View>
       )}
 
+      <BackupReminder today={today} />
       <NotificationPrompt />
 
       {feed.ok.length > 0 ? (
