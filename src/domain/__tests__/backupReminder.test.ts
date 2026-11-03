@@ -9,9 +9,7 @@ const state = (over: Partial<Parameters<typeof backupReminder>[0]> = {}) => ({
 });
 
 test('never backed up: only once the first car is over 30 days old', () => {
-  expect(backupReminder(state(), TODAY)).toBe(
-    'Você ainda não fez nenhum backup. Se perder o celular, perde o histórico.',
-  );
+  expect(backupReminder(state(), TODAY)).toBe('Nunca feito');
   expect(backupReminder(state({ firstCarAt: '2026-10-04' }), TODAY)).toBeNull(); // 30 days
   expect(backupReminder(state({ firstCarAt: '2026-10-03' }), TODAY)).not.toBeNull();
   expect(backupReminder(state({ firstCarAt: null }), TODAY)).toBeNull();
@@ -19,9 +17,7 @@ test('never backed up: only once the first car is over 30 days old', () => {
 
 test('backed up: only once it is over 90 days old, in whole months', () => {
   expect(backupReminder(state({ lastBackupAt: '2026-08-05' }), TODAY)).toBeNull(); // 90 days
-  expect(backupReminder(state({ lastBackupAt: '2026-08-04' }), TODAY)).toBe(
-    'Seu último backup foi há 3 meses. Se perder o celular, perde o histórico.',
-  );
+  expect(backupReminder(state({ lastBackupAt: '2026-08-04' }), TODAY)).toBe('Último há 3 meses');
   expect(backupReminder(state({ lastBackupAt: '2026-07-01' }), TODAY)).toMatch(/há 4 meses/);
 });
 

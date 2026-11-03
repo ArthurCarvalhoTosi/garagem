@@ -15,7 +15,7 @@ jest.mock('expo-crypto', () => ({
 let mockAccount: Account = { status: 'signed-out' };
 jest.mock('@/account', () => ({ useAccount: () => mockAccount }));
 
-const NEVER = 'Você ainda não fez nenhum backup. Se perder o celular, perde o histórico.';
+const NEVER = 'Nunca feito';
 // The car is added today; "today" on the dashboard moves forward instead.
 const later = (days: number) => addDays(todayISO(), days);
 let db: Db;
@@ -39,11 +39,14 @@ test('a month after adding the car, without a backup, it asks for one', async ()
 test('an old backup brings it back, counted in months', async () => {
   await recordBackup(db, todayISO());
   await render(<BackupReminder today={later(90)} />);
-  expect(screen.queryByText(/backup/)).toBeNull();
+  expect(screen.queryByText('Backup')).toBeNull();
 
   await render(<BackupReminder today={later(125)} />);
+  // One screen-reader stop, urgency in words, like a maintenance row.
   expect(
-    screen.getByText('Seu último backup foi há 4 meses. Se perder o celular, perde o histórico.'),
+    screen.getByLabelText(
+      'Backup. Atenção. Último há 4 meses. Se perder o celular, perde o histórico.',
+    ),
   ).toBeOnTheScreen();
 });
 

@@ -8,17 +8,16 @@ export type BackupState = {
 };
 
 /**
- * The nudge to back up for someone without an account, or null: never backed up with a car
- * here for over 30 days, or the last backup over 90 days old, unless snoozed.
+ * How stale this phone's backup is ("Nunca feito", "Último há 4 meses") when it's worth a
+ * nudge, or null: never backed up with a car here for over 30 days, or the last backup over
+ * 90 days old, unless snoozed.
  */
 export function backupReminder(s: BackupState, today: ISODate): string | null {
   if (!s.firstCarAt || (s.snoozedUntil && today < s.snoozedUntil)) return null;
   if (!s.lastBackupAt) {
-    return daysBetween(s.firstCarAt, today) > 30
-      ? 'Você ainda não fez nenhum backup. Se perder o celular, perde o histórico.'
-      : null;
+    return daysBetween(s.firstCarAt, today) > 30 ? 'Nunca feito' : null;
   }
   const days = daysBetween(s.lastBackupAt, today);
   if (days <= 90) return null;
-  return `Seu último backup foi há ${Math.floor(days / 30)} meses. Se perder o celular, perde o histórico.`;
+  return `Último há ${Math.floor(days / 30)} meses`;
 }
