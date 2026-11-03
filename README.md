@@ -1,6 +1,6 @@
 # Garagem
 
-App de manutenção preventiva de carros (Expo + React Native, pt-BR). Decisões de produto e arquitetura em [decisoes_projeto_manutencao_veicular.md](decisoes_projeto_manutencao_veicular.md).
+App de manutenção preventiva de carros (Expo + React Native, pt-BR). Decisões de produto e arquitetura ficam num repositório privado à parte.
 
 ## Rodar
 

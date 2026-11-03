@@ -47,3 +47,7 @@ example
 
 # Cloudflare Wrangler local state (wrangler pages dev)
 .wrangler/
+
+# plans live in the private garagem-docs repo; this one is public
+/decisoes_projeto_manutencao_veicular.md
+/plano_empresa_publicacao.md

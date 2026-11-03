@@ -2,7 +2,9 @@
 
 App de manutenção preventiva de carros (Expo SDK 58 + React Native, interface em pt-BR), 100% local na v0.
 
-Antes de mudar comportamento, leia [decisoes_projeto_manutencao_veicular.md](decisoes_projeto_manutencao_veicular.md): produto, regras de negócio, modelo de dados, segurança e pendências. Ao fechar uma decisão ou entregar um item, atualize esse documento (seção 12) no mesmo trabalho.
+Antes de mudar comportamento, leia `../garagem-docs/decisoes_projeto_manutencao_veicular.md` (o "doc de decisões"): produto, regras de negócio, modelo de dados, segurança e pendências. Ao fechar uma decisão ou entregar um item, atualize esse documento (seção 12) no mesmo trabalho e faça o commit lá.
+
+Planos e decisões ficam no repositório **privado** `garagem-docs`, clonado ao lado deste (`D:\Projects\garagem-docs`), porque este repositório é público. Nunca grave aqui planos, dados da empresa (CNPJ, D-U-N-S, endereço, contas) ou detalhes de infraestrutura: vão para o `garagem-docs`.
 
 ## Mapa
 
