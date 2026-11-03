@@ -67,7 +67,8 @@ test('shows the total spent and a reverse timeline, flagging late records', asyn
   expect(screen.queryByText('Por km')).toBeNull();
   expect(screen.getByText('Mobil 5W-30')).toBeOnTheScreen();
 
-  const dates = screen.getAllByText(/ · .* km$/).map((t) => t.props.children);
+  // Records only: they start with the day; forecasts start with "~".
+  const dates = screen.getAllByText(/^\d.* · .* km$/).map((t) => t.props.children);
   expect(dates).toEqual([
     `${formatDate(todayISO())} · 42.000 km`,
     `${formatDate(yesterday)} · 41.900 km`,
@@ -75,6 +76,42 @@ test('shows the total spent and a reverse timeline, flagging late records', asyn
   ]);
   // Logged today for earlier dates: two late records, the same-day one isn't flagged.
   expect(screen.getAllByText(`Registrado em ${formatDate(todayISO())}`)).toHaveLength(2);
+});
+
+test('runs from the forecast through "Hoje" into the records, with facts on each', async () => {
+  // The oil was changed 10 days in (500 km past the marco zero), then 1.400 km later.
+  await registerMaintenance(db, {
+    vehicleId,
+    itemId: oilId,
+    performedAt: addDays(since, 10),
+    km: 40500,
+    costCents: 30000,
+  });
+  await registerMaintenance(db, {
+    vehicleId,
+    itemId: oilId,
+    performedAt: todayISO(),
+    km: 41900,
+    costCents: 35000,
+  });
+  await render(<History />);
+
+  // Next oil change: 10.000 km after 41.900, at ~1.000 km/month.
+  expect(
+    screen.getByRole('button', {
+      name: /^Troca de óleo e filtro\. ~.* · 51\.900 km\. Última vez R\$/,
+    }),
+  ).toBeOnTheScreen();
+  expect(screen.getByText('Hoje')).toBeOnTheScreen();
+  expect(screen.getByRole('header', { name: addDays(since, 10).slice(0, 4) })).toBeOnTheScreen();
+  expect(screen.getAllByText('No prazo')).toHaveLength(2);
+  expect(screen.getByText('1.400 km em 50 dias')).toBeOnTheScreen();
+  expect(screen.getByText('Primeira vez registrada')).toBeOnTheScreen();
+  // The forecast uses the last price paid, not the first.
+  expect(screen.getByLabelText(/^Gasto previsto por mês\. .*: R\$\s350,00\.$/)).toBeOnTheScreen();
+
+  await userEvent.setup().press(screen.getByRole('button', { name: 'Registrar troca' }));
+  expect(router.push).toHaveBeenCalledWith({ pathname: '/pick-item', params: { vehicleId } });
 });
 
 test('shows the cost per km once readings cover a few months', async () => {
@@ -100,7 +137,7 @@ test('opens the PDF export for this car', async () => {
   await registerMaintenance(db, { vehicleId, itemId: oilId, performedAt: todayISO(), km: 42000 });
   await render(<History />);
 
-  await userEvent.setup().press(screen.getByRole('button', { name: 'Exportar histórico em PDF' }));
+  await userEvent.setup().press(screen.getByRole('button', { name: 'Exportar histórico' }));
   expect(router.push).toHaveBeenCalledWith({ pathname: '/dossier', params: { vehicleId } });
 });
 
@@ -184,7 +221,9 @@ describe('a record', () => {
     const hide = screen.getByRole('button', { name: `Ocultar foto do comprovante de ${WHAT}` });
     expect(hide).toBeExpanded();
     await user.press(hide);
-    expect(screen.queryByRole('image')).not.toBeOnTheScreen();
+    expect(
+      screen.queryByRole('image', { name: `Foto do comprovante de ${WHAT}` }),
+    ).not.toBeOnTheScreen();
   });
 
   test('explains a photo that could not be opened', async () => {

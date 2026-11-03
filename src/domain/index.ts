@@ -12,3 +12,4 @@ export * from './dossier';
 export * from './cost';
 export * from './csv';
 export * from './backupReminder';
+export * from './timeline';
