@@ -33,6 +33,8 @@ type Props = {
   selected?: boolean;
   /** A separate control at the end of the row (e.g. remove), reachable on its own. */
   end?: ReactNode;
+  /** Share of the interval used up (0 to 1): draws a life gauge under the text in place of the side bar. */
+  life?: number | null;
 };
 
 export function ItemRow({
@@ -45,6 +47,7 @@ export function ItemRow({
   actions,
   selected,
   end,
+  life,
 }: Props) {
   const { c } = useTheme();
   const u = urgencyStyle[urgency];
@@ -63,6 +66,22 @@ export function ItemRow({
             {secondary}
           </AppText>
         ) : null}
+        {life != null ? (
+          // Decorative: the words above already say how close it is.
+          <View
+            testID="life-gauge"
+            style={[styles.track, { backgroundColor: c.track }]}
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          >
+            <View
+              style={[
+                styles.fill,
+                { width: `${Math.round(life * 100)}%`, backgroundColor: c[u.bar] },
+              ]}
+            />
+          </View>
+        ) : null}
       </View>
       {selected ? <Icon name="check" size={24} color={c.primary} /> : null}
     </>
@@ -75,7 +94,7 @@ export function ItemRow({
         { backgroundColor: critical ? c.criticalTint : c.surface, borderBottomColor: c.line },
       ]}
     >
-      <View style={[styles.bar, { backgroundColor: c[u.bar] }]} />
+      {life != null ? null : <View style={[styles.bar, { backgroundColor: c[u.bar] }]} />}
       <View style={styles.body}>
         {/* The summary is one screen-reader stop; the action stays a separate, reachable button. */}
         <View style={styles.main}>
@@ -135,6 +154,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.l,
   },
   text: { flex: 1 },
+  track: { height: 6, borderRadius: 3, marginTop: space.s, overflow: 'hidden' },
+  fill: { height: 6, borderRadius: 3 },
   // Aligns the compact buttons with the text column, not the icon; they wrap under large fonts.
   action: {
     flexDirection: 'row',

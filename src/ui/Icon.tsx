@@ -1,4 +1,5 @@
 import { SymbolView, type AndroidSymbol, type SFSymbol } from 'expo-symbols';
+import { Platform, useWindowDimensions } from 'react-native';
 
 // @expo/vector-icons is not installed (SDK 58 no longer ships it), so names keep
 // MaterialCommunityIcons spelling but render native SF Symbols (iOS) / Material Symbols (Android, web).
@@ -29,6 +30,14 @@ const glyphs = {
   'chevron-right': { ios: 'chevron.right', android: 'chevron_right' },
   'chevron-down': { ios: 'chevron.down', android: 'expand_more' },
   'trash-can-outline': { ios: 'trash', android: 'delete' },
+  // Telltales for the maintenance presets; Material Symbols has no brake light, so the circled "!" stands in.
+  'air-filter': { ios: 'wind', android: 'air' },
+  'car-brake-alert': { ios: 'exclamationmark.brakesignal', android: 'error' },
+  'timing-belt': { ios: 'gearshape.2', android: 'cycle' },
+  wrench: { ios: 'wrench.and.screwdriver', android: 'build' },
+  receipt: { ios: 'doc.text', android: 'receipt_long' },
+  bell: { ios: 'bell', android: 'notifications' },
+  ruler: { ios: 'ruler', android: 'straighten' },
   account: { ios: 'person.crop.circle', android: 'account_circle' },
   backup: { ios: 'externaldrive.badge.plus', android: 'backup' },
   restore: { ios: 'arrow.counterclockwise', android: 'settings_backup_restore' },
@@ -41,10 +50,16 @@ type Props = { name: IconName; size?: number; color: string };
 /** Decorative: always hidden from screen readers; the surrounding label carries the meaning. */
 export function Icon({ name, size = 24, color }: Props) {
   const g = glyphs[name];
+  const { fontScale } = useWindowDimensions();
+  // On Android the glyph is a font character in a size x size box, so it grows with the system
+  // font size while the box doesn't, and gets cut. Shrink the glyph by the same factor and keep
+  // the box: icons stay their size, as on iOS.
+  const glyph = Platform.OS === 'android' ? size / fontScale : size;
   return (
     <SymbolView
       name={{ ios: g.ios, android: g.android, web: g.android }}
-      size={size}
+      size={glyph}
+      style={{ width: size, height: size }}
       tintColor={color}
       testID={`icon-${name}`}
       accessibilityElementsHidden

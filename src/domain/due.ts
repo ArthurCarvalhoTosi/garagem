@@ -53,6 +53,22 @@ export function computeDue(
   return { dueDate, daysLeft, dueKm, kmLeft, dueBy, urgency: urgencyOf(daysLeft, kmLeft) };
 }
 
+/**
+ * How much of the interval is used up, 0 to 1, by whichever limit is further along (the one that
+ * comes first). Past the limit it stays at 1. `null` for an item without an interval.
+ */
+export function lifeUsed(item: ItemSchedule, due: Due, today: ISODate): number | null {
+  const parts: number[] = [];
+  if (item.intervalKm != null && item.intervalKm > 0 && due.kmLeft !== null)
+    parts.push(1 - due.kmLeft / item.intervalKm);
+  if (item.intervalMonths != null && item.intervalMonths > 0) {
+    const span = daysBetween(item.baselineDate, addMonths(item.baselineDate, item.intervalMonths));
+    parts.push(daysBetween(item.baselineDate, today) / span);
+  }
+  if (parts.length === 0) return null;
+  return Math.min(1, Math.max(0, ...parts));
+}
+
 const atMost = (v: number | null, limit: number) => v != null && v <= limit;
 
 export function urgencyOf(daysLeft: number | null, kmLeft: number | null): Urgency {

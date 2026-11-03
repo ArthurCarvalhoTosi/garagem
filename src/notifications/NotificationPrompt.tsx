@@ -1,10 +1,9 @@
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import * as Notifications from 'expo-notifications';
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
 import { useDb } from '@/db/provider';
 import { answerNotificationPrompt, notificationPromptQuery } from '@/db/repo';
-import { AppText, Button, space } from '@/ui';
+import { Notice } from '@/ui';
 import { rescheduleDigest, setupNotifications } from './scheduler';
 
 /**
@@ -52,21 +51,16 @@ export function NotificationPrompt() {
   };
 
   return (
-    <View style={styles.block}>
-      <AppText variant="bodyStrong">Quer um lembrete aos sábados?</AppText>
-      <AppText color="inkMuted">
-        Aos sábados, às 9h, o Garagem avisa quais trocas estão chegando nos seus carros. Se estiver
-        tudo em dia, ele não avisa.
-      </AppText>
-      <View style={styles.actions}>
-        <Button variant="secondary" label="Ativar lembretes" loading={asking} onPress={enable} />
-        <Button variant="quiet" label="Agora não" disabled={asking} onPress={close} />
-      </View>
-    </View>
+    <Notice
+      icon="bell"
+      title="Quer um lembrete aos sábados?"
+      lines={[
+        'Aos sábados, às 9h, o Garagem avisa quais trocas estão chegando nos seus carros. Se estiver tudo em dia, ele não avisa.',
+      ]}
+      actions={[
+        { label: 'Ativar lembretes', loading: asking, onPress: enable },
+        { label: 'Agora não', disabled: asking, onPress: close },
+      ]}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  block: { gap: space.s, marginBottom: space.xxl },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: space.xl },
-});
