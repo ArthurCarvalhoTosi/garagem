@@ -1,6 +1,7 @@
 import { act, render, screen, userEvent } from '@testing-library/react-native';
+import type { AlertButton } from 'react-native';
 import type { Account as AccountState } from '@/account';
-import { signInWithGoogle, signOut } from '@/account';
+import { deleteAccount, signInWithGoogle, signOut } from '@/account';
 import Account from '@/app/account';
 import type { Db } from '@/db/client';
 import { ValidationError } from '@/domain';
@@ -16,6 +17,7 @@ jest.mock('@/account', () => ({
   useAccount: () => mockAccount,
   signInWithGoogle: jest.fn(async () => 'signed-in'),
   signOut: jest.fn(async () => {}),
+  deleteAccount: jest.fn(async () => {}),
 }));
 
 let mockSync: SyncStatus = { state: 'idle', lastSyncAt: null };
@@ -92,6 +94,81 @@ test('signed in: shows the account and signs out after confirming', async () => 
 
   await press('Sair');
   expect(signOut).toHaveBeenCalledWith(db);
+});
+
+describe('signed in: deleting the account', () => {
+  beforeEach(() => {
+    mockAccount = { status: 'signed-in', email: 'ana@example.com' };
+  });
+
+  test('deletes only after confirming, and says the phone keeps the data', async () => {
+    const { alert, press } = spyAlert();
+    await render(<Account />);
+    await userEvent.setup().press(screen.getByRole('button', { name: 'Excluir conta' }));
+    expect(alert).toHaveBeenLastCalledWith(
+      'Excluir conta?',
+      expect.stringContaining('carros, histórico, fotos e links do dossiê'),
+      expect.any(Array),
+    );
+    expect(deleteAccount).not.toHaveBeenCalled();
+
+    await press('Excluir');
+    expect(deleteAccount).toHaveBeenCalledWith(db);
+    expect(alert).toHaveBeenLastCalledWith(
+      'Conta excluída',
+      'Seus carros e o histórico continuam neste aparelho.',
+    );
+  });
+
+  test('cancelling deletes nothing', async () => {
+    const { press } = spyAlert();
+    await render(<Account />);
+    await userEvent.setup().press(screen.getByRole('button', { name: 'Excluir conta' }));
+    await press('Cancelar');
+    expect(deleteAccount).not.toHaveBeenCalled();
+  });
+
+  test('shows the plain message when it fails', async () => {
+    (deleteAccount as jest.Mock).mockRejectedValueOnce(
+      new ValidationError('Não foi possível excluir a conta. Confira a internet e tente de novo.'),
+    );
+    const { press } = spyAlert();
+    await render(<Account />);
+    await userEvent.setup().press(screen.getByRole('button', { name: 'Excluir conta' }));
+    await press('Excluir');
+    expect(
+      screen.getByText('Não foi possível excluir a conta. Confira a internet e tente de novo.'),
+    ).toBeOnTheScreen();
+  });
+
+  test('a second tap while deleting is ignored', async () => {
+    let finish: () => void = () => {};
+    (deleteAccount as jest.Mock).mockImplementationOnce(
+      () => new Promise<void>((resolve) => (finish = resolve)),
+    );
+    const { alert } = spyAlert();
+    await render(<Account />);
+    const user = userEvent.setup();
+    await user.press(screen.getByRole('button', { name: 'Excluir conta' }));
+    // Confirm without waiting: the deletion is still running.
+    const confirm = (alert.mock.calls.at(-1)![2] as AlertButton[]).find(
+      (b) => b.text === 'Excluir',
+    )!;
+    let running: unknown;
+    await act(async () => {
+      running = confirm.onPress!();
+    });
+    expect(screen.getByRole('button', { name: 'Excluir conta' })).toBeBusy();
+
+    alert.mockClear();
+    await user.press(screen.getByRole('button', { name: 'Excluir conta' }));
+    expect(alert).not.toHaveBeenCalled();
+    await act(async () => {
+      finish();
+      await running;
+    });
+    expect(deleteAccount).toHaveBeenCalledTimes(1);
+  });
 });
 
 test('renders nothing while the stored session loads', async () => {

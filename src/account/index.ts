@@ -28,6 +28,7 @@ export const AUTH_REDIRECT = 'garagem://auth-callback';
 const DEK_NAME = 'garagem.cloud.dek';
 
 const SIGN_IN_FAILED = 'Não foi possível entrar. Confira a internet e tente de novo.';
+const DELETE_FAILED = 'Não foi possível excluir a conta. Confira a internet e tente de novo.';
 
 // Before any client exists: the PKCE verifier and challenge come from it.
 installWebCrypto();
@@ -38,24 +39,33 @@ let current: { db: Db; client: SupabaseClient } | undefined;
 export function cloud(db: Db): SupabaseClient {
   // A reset reopens the database: a client bound to the old handle would write nowhere.
   if (current?.db !== db) {
-    current = {
-      db,
-      client: createClient(SUPABASE_URL, SUPABASE_KEY, {
-        auth: {
-          storage: {
-            getItem: async (key) => readAuthItem(db, key),
-            setItem: async (key, value) => writeAuthItem(db, key, value),
-            removeItem: async (key) => removeAuthItem(db, key),
-          },
-          flowType: 'pkce',
-          autoRefreshToken: true,
-          persistSession: true,
-          detectSessionInUrl: false,
+    const client = createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: {
+        storage: {
+          getItem: async (key) => readAuthItem(db, key),
+          setItem: async (key, value) => writeAuthItem(db, key, value),
+          removeItem: async (key) => removeAuthItem(db, key),
         },
-      }),
-    };
+        flowType: 'pkce',
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: false,
+      },
+    });
+    // The session can also end on the server, as when the account is deleted on another phone.
+    // Forget the key and the sync bookkeeping then too, or the next account signing in here
+    // would take this one's rows as already uploaded.
+    client.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') forgetCloud(db).catch(() => {});
+    });
+    current = { db, client };
   }
   return current.client;
+}
+
+async function forgetCloud(db: Db): Promise<void> {
+  await SecureStore.deleteItemAsync(DEK_NAME);
+  clearSyncState(db);
 }
 
 /**
@@ -126,10 +136,20 @@ export async function dataKey(db: Db): Promise<AESEncryptionKey> {
  * with the session, so another account signing in here starts from scratch.
  */
 export async function signOut(db: Db): Promise<void> {
-  await SecureStore.deleteItemAsync(DEK_NAME);
-  clearSyncState(db);
+  await forgetCloud(db);
   // Local scope: other phones signed in to the same account stay signed in.
   await cloud(db).auth.signOut({ scope: 'local' });
+}
+
+/**
+ * Deletes the account and all of it in the cloud: the data key first, then the photos, the
+ * synced rows and the dossier links (Edge Function delete-account). Data on this phone stays,
+ * signed out. Other phones lose the session at their next token refresh.
+ */
+export async function deleteAccount(db: Db): Promise<void> {
+  const { error } = await cloud(db).functions.invoke('delete-account', { method: 'POST' });
+  if (error) throw new ValidationError(DELETE_FAILED);
+  await signOut(db);
 }
 
 export type Account =
