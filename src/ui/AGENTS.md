@@ -1,6 +1,6 @@
 # src/ui: design system
 
-A identidade visual e seus motivos estão na seção 10 do [doc de decisões](../../decisoes_projeto_manutencao_veicular.md). Telas novas montam a interface com estes componentes em vez de estilizar do zero.
+A identidade visual e seus motivos estão na seção 10 do doc de decisões (`../garagem-docs`, ver o `AGENTS.md` da raiz). Telas novas montam a interface com estes componentes em vez de estilizar do zero.
 
 ## Tokens (`theme.ts`)
 
