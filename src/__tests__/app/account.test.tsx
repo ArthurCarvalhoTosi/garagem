@@ -186,6 +186,7 @@ describe('signed in: sync status', () => {
     [{ state: 'idle', lastSyncAt: null }, /^Seus dados ainda não foram para a nuvem\.$/],
     [{ state: 'syncing', lastSyncAt: null }, /^Sincronizando…$/],
     [{ state: 'failed', lastSyncAt: null }, /^Não foi possível sincronizar agora\./],
+    [{ state: 'outdated', lastSyncAt: null }, /^Atualize o app para continuar sincronizando\.$/],
     [
       { state: 'idle', lastSyncAt: new Date().toISOString() },
       /^Dados na nuvem: sincronizado hoje às \d\d:\d\d\.$/,

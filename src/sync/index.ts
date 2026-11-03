@@ -5,6 +5,7 @@ import type { AESEncryptionKey } from 'expo-crypto';
 import type { Db } from '@/db/client';
 import {
   applyRemote,
+  DATA_SCHEMA,
   forgetPhotos,
   isPhotoUploaded,
   livePhotos,
@@ -52,7 +53,8 @@ export const PULL_OVERLAP_MS = 60_000;
 const PUSH_BATCH = 200;
 const REMOVE_BATCH = 100;
 
-export type SyncResult = { pulled: number; pushed: number; skipped: number };
+/** `outdated`: a newer app wrote to the cloud, so this one only downloads until updated. */
+export type SyncResult = { pulled: number; pushed: number; skipped: number; outdated: boolean };
 
 export async function syncOnce(
   db: Db,
@@ -77,8 +79,19 @@ export async function syncOnce(
       newest = s.serverUpdatedAt;
   if (newest && newest !== cursor) writeSyncPref(db, 'pullCursor', newest);
 
+  // A newer app's rows may carry columns this one drops on landing: pushing its own copies
+  // would wipe them in the cloud. Local edits stay pending and go up after the update.
+  // shortcut: a row edited here meanwhile still loses the newer columns once it goes up (rows
+  // merge whole, last write wins); merge column by column if that ever bites.
+  const newer = rows.reduce(
+    (n, r) => Math.max(n, r.schema),
+    Number(readSyncPref(db, 'newerSchema')),
+  );
+  if (newer > DATA_SCHEMA) writeSyncPref(db, 'newerSchema', String(newer));
+  const outdated = newer > DATA_SCHEMA;
+
   // Read after landing: a row the server just replaced locally is no longer pending.
-  const pending = await sendPhotos(db, remote, key, photos, pendingRows(db));
+  const pending = outdated ? [] : await sendPhotos(db, remote, key, photos, pendingRows(db));
   for (let i = 0; i < pending.length; i += PUSH_BATCH) {
     const batch = pending.slice(i, i + PUSH_BATCH);
     await remote.push(await Promise.all(batch.map((r) => sealRow(key, r))));
@@ -92,6 +105,7 @@ export async function syncOnce(
     pulled: applied,
     pushed: pending.length,
     skipped: skipped + (sealed.length - rows.length) + badPhotos,
+    outdated,
   };
 }
 

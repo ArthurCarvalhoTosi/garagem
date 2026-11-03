@@ -1,6 +1,7 @@
 // Local side of the cloud sync: which rows wait to upload, and how rows from the cloud land.
 // The device's own bookkeeping (sync_state, sync:* prefs) never leaves the phone.
 import { and, eq, inArray, isNull, like } from 'drizzle-orm';
+import migrations from '../../drizzle/migrations';
 import type { Db } from './client';
 import {
   attachments,
@@ -24,6 +25,12 @@ export const SYNC_TABLES = {
   // One row per car, keyed by the car's id.
   vehicle_specs: { table: vehicleSpecs, key: vehicleSpecs.vehicleId, keyName: 'vehicleId' },
 } as const;
+
+/**
+ * The data schema this app writes: the number of migrations it knows. A new synced column
+ * always comes with a migration, so this grows by itself. Sync and backup both carry it.
+ */
+export const DATA_SCHEMA = migrations.journal.entries.length;
 
 export type SyncTable = keyof typeof SYNC_TABLES;
 export const SYNC_TABLE_NAMES = Object.keys(SYNC_TABLES) as SyncTable[];
@@ -190,7 +197,8 @@ export function livePhotos(db: Db): { id: string; filePath: string }[] {
 
 // --- Device-local sync prefs ---
 
-type SyncPref = 'pullCursor' | 'lastSyncAt';
+// newerSchema: the highest schema seen in the cloud, when a newer app wrote it.
+type SyncPref = 'pullCursor' | 'lastSyncAt' | 'newerSchema';
 
 export function readSyncPref(db: Db, name: SyncPref): string | null {
   return (

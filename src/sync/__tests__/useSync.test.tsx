@@ -75,6 +75,19 @@ test('syncs on opening and after signing in, with the data key', async () => {
   expect(syncOnce).toHaveBeenCalledTimes(2);
 });
 
+test('says when a newer app wrote to the cloud', async () => {
+  (syncOnce as jest.Mock).mockResolvedValueOnce({
+    pulled: 1,
+    pushed: 0,
+    skipped: 0,
+    outdated: true,
+  });
+  const { result } = await mount();
+  await act(async () => mockAuthListener('INITIAL_SESSION'));
+  await settle();
+  expect(result.current.state).toBe('outdated');
+});
+
 test('signed out: never syncs', async () => {
   mockSession = null;
   await mount();
