@@ -2,7 +2,7 @@ import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
-import { signInWithGoogle, signOut, useAccount } from '@/account';
+import { deleteAccount, signInWithGoogle, signOut, useAccount } from '@/account';
 import { useDb } from '@/db/provider';
 import { vehiclesQuery } from '@/db/repo';
 import { formatMoment } from '@/domain';
@@ -14,6 +14,7 @@ export default function Account() {
   const account = useAccount(db);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const sync = useSyncStatus();
   // Opened from a new phone's first screen: once the account's cars land, show the garage.
   const [firstRun] = useState(() => vehiclesQuery(db).all().length === 0);
@@ -56,6 +57,33 @@ export default function Account() {
       },
     ]);
 
+  const remove = () => {
+    if (deleting) return;
+    Alert.alert(
+      'Excluir conta?',
+      'A cópia na nuvem some para sempre: carros, histórico, fotos e links do dossiê. Os dados deste celular continuam aqui.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            setError(null);
+            try {
+              await deleteAccount(db);
+              Alert.alert('Conta excluída', 'Seus carros e o histórico continuam neste aparelho.');
+            } catch (e) {
+              setError(e);
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   if (account.status === 'signed-in') {
     return (
       <Screen
@@ -70,6 +98,7 @@ export default function Account() {
               onPress={syncNow}
             />
             <Button variant="quiet" label="Sair da conta" onPress={leave} />
+            <Button variant="quiet" label="Excluir conta" loading={deleting} onPress={remove} />
           </>
         }
       >

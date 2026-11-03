@@ -427,6 +427,12 @@ entrypoint = "./functions/user-key/index.ts"
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/user-key/*.html" ]
 
+[functions.delete-account]
+enabled = true
+verify_jwt = false
+import_map = "./functions/delete-account/deno.json"
+entrypoint = "./functions/delete-account/index.ts"
+
 # Public: the dossier page calls it without a session. The link secret never reaches it.
 [functions.dossier]
 enabled = true

@@ -1,9 +1,18 @@
 import * as WebBrowser from 'expo-web-browser';
 import type { Db } from '@/db/client';
-import { readAuthItem } from '@/db/repo';
+import { createVehicle, readAuthItem } from '@/db/repo';
+import { pendingRows, markSynced } from '@/db/sync';
 import { createTestDb } from '@/db/test-utils/testDb';
 import { ValidationError } from '@/domain';
-import { AUTH_REDIRECT, cloud, codeFromRedirect, isDataKey, signInWithGoogle, signOut } from '..';
+import {
+  AUTH_REDIRECT,
+  cloud,
+  codeFromRedirect,
+  deleteAccount,
+  isDataKey,
+  signInWithGoogle,
+  signOut,
+} from '..';
 
 const mockStore = new Map<string, string>();
 jest.mock('expo-secure-store', () => ({
@@ -21,6 +30,13 @@ const mockAuth = {
   signInWithOAuth: jest.fn(),
   exchangeCodeForSession: jest.fn(),
   signOut: jest.fn(async () => ({ error: null })),
+  onAuthStateChange: jest.fn((_cb: (event: string) => void) => ({
+    data: { subscription: { unsubscribe() {} } },
+  })),
+};
+/** What the Supabase client tells its listeners, as when the server ends the session. */
+const emitAuth = (event: string) => {
+  for (const [cb] of mockAuth.onAuthStateChange.mock.calls) cb(event);
 };
 const mockFunctions = { invoke: jest.fn() };
 const mockCreateClient = jest.fn((..._args: unknown[]) => ({
@@ -168,4 +184,51 @@ test('signOut drops the data key and signs out only this device', async () => {
   await signOut(db);
   expect(mockStore.has('garagem.cloud.dek')).toBe(false);
   expect(mockAuth.signOut).toHaveBeenCalledWith({ scope: 'local' });
+});
+
+describe('deleteAccount', () => {
+  test('deletes the account in the cloud, then signs this phone out', async () => {
+    mockStore.set('garagem.cloud.dek', DEK);
+    mockFunctions.invoke.mockResolvedValue({ data: { deleted: true }, error: null });
+    await deleteAccount(db);
+    expect(mockFunctions.invoke).toHaveBeenCalledWith('delete-account', { method: 'POST' });
+    expect(mockStore.has('garagem.cloud.dek')).toBe(false);
+    expect(mockAuth.signOut).toHaveBeenCalledWith({ scope: 'local' });
+  });
+
+  test('fails plainly and stays signed in when the cloud did not delete it', async () => {
+    mockStore.set('garagem.cloud.dek', DEK);
+    mockFunctions.invoke.mockResolvedValue({ data: null, error: new Error('500') });
+    await expect(deleteAccount(db)).rejects.toThrow(
+      'Não foi possível excluir a conta. Confira a internet e tente de novo.',
+    );
+    expect(mockStore.get('garagem.cloud.dek')).toBe(DEK);
+    expect(mockAuth.signOut).not.toHaveBeenCalled();
+  });
+});
+
+test('a session ended on the server forgets the key and what was uploaded', async () => {
+  await createVehicle(
+    db,
+    {
+      nickname: 'Meu Sandero',
+      odometerKm: 40000,
+      monthlyKmEstimate: 1000,
+      severeUse: false,
+      items: [],
+    },
+    '2026-10-01',
+  );
+  markSynced(db, pendingRows(db));
+  mockStore.set('garagem.cloud.dek', DEK);
+  cloud(db);
+
+  emitAuth('TOKEN_REFRESHED');
+  expect(mockStore.has('garagem.cloud.dek')).toBe(true);
+
+  emitAuth('SIGNED_OUT');
+  await Promise.resolve();
+  expect(mockStore.has('garagem.cloud.dek')).toBe(false);
+  // Another account signing in here uploads everything again.
+  expect(pendingRows(db).length).toBeGreaterThan(0);
 });
