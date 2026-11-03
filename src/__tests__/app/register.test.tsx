@@ -1,11 +1,12 @@
 import { act, fireEvent, render, screen, userEvent } from '@testing-library/react-native';
 import { eq, isNull } from 'drizzle-orm';
 import * as ImagePicker from 'expo-image-picker';
+import * as repo from '@/db/repo';
 import Register from '@/app/register';
 import type { Db } from '@/db/client';
-import { logsQuery, readingsQuery, registerMaintenance } from '@/db/repo';
+import { itemsQuery, logsQuery, readingsQuery, registerMaintenance } from '@/db/repo';
 import { attachments, maintenanceItems } from '@/db/schema';
-import { addDays, projectOdometer, todayISO } from '@/domain';
+import { addDays, formatDate, projectOdometer, todayISO } from '@/domain';
 import {
   attachmentsMock,
   params,
@@ -13,6 +14,7 @@ import {
   router,
   seedVehicle,
   setupScreen,
+  spyAlert,
 } from '@/test-utils/screens';
 
 jest.mock('expo-router', () => require('@/test-utils/screens').expoRouterMock);
@@ -51,6 +53,8 @@ test('saves the log, moves the item baseline to it and closes', async () => {
   const projected = projectOdometer([{ km: 40000, readAt: since }], 1000, todayISO());
   await render(<Register />);
   const user = userEvent.setup();
+  // Nothing to delete yet: only an existing record offers it.
+  expect(screen.queryByRole('button', { name: 'Excluir troca' })).not.toBeOnTheScreen();
 
   expect(screen.getByRole('header', { name: 'Troca de óleo e filtro' })).toBeOnTheScreen();
   expect(kmField()).toHaveDisplayValue(String(projected));
@@ -380,6 +384,69 @@ describe('editing a log', () => {
     expect(screen.getByText(/^Esse KM é menor que uma leitura anterior/)).toBeOnTheScreen();
     expect(logsQuery(db, vehicleId).all()).toEqual([expect.objectContaining({ km: 52000 })]);
     expect(router.back).not.toHaveBeenCalled();
+  });
+
+  test('says when a photo from another phone has not arrived yet', async () => {
+    attachmentsMock.hasPhoto.mockReturnValueOnce(false);
+    await seedLog({ filePath: 'attachments/old.bin', mime: 'image/jpeg', sizeBytes: 1 });
+    await render(<Register />);
+
+    expect(
+      screen.getByText('A foto ainda está vindo da nuvem. Tente de novo daqui a pouco.'),
+    ).toBeOnTheScreen();
+    expect(screen.queryByText('Abrindo a foto…')).not.toBeOnTheScreen();
+    expect(attachmentsMock.readPhoto).not.toHaveBeenCalled();
+  });
+
+  test('is deleted only after confirming, with its reading, and the baseline goes back', async () => {
+    await seedLog({ filePath: 'attachments/old.bin', mime: 'image/jpeg', sizeBytes: 1 });
+    const { alert, press } = spyAlert();
+    await render(<Register />);
+
+    await userEvent.setup().press(screen.getByRole('button', { name: 'Excluir troca' }));
+    expect(alert).toHaveBeenCalledWith(
+      'Excluir esta troca?',
+      `Troca de óleo e filtro, ${formatDate(tenDaysAgo)}. O registro e a foto do comprovante serão apagados deste aparelho. Isso não pode ser desfeito.`,
+      [
+        expect.objectContaining({ text: 'Cancelar', style: 'cancel' }),
+        expect.objectContaining({ text: 'Excluir', style: 'destructive' }),
+      ],
+    );
+    expect(logsQuery(db, vehicleId).all()).toHaveLength(1);
+    await press('Excluir');
+
+    expect(logsQuery(db, vehicleId).all()).toEqual([]);
+    expect(readingsQuery(db, vehicleId).all()).toEqual([{ km: 40000, readAt: since }]);
+    expect(itemsQuery(db, vehicleId).all()[0]).toMatchObject({
+      baselineKm: 40000,
+      baselineDate: since,
+    });
+    expect(attachmentsMock.deleteRemovedPhotos).toHaveBeenCalled();
+    expect(router.back).toHaveBeenCalled();
+  });
+
+  test('stays when the deletion is cancelled, and a failure reads plainly', async () => {
+    await seedLog();
+    const { alert, press } = spyAlert();
+    await render(<Register />);
+    const user = userEvent.setup();
+
+    await user.press(screen.getByRole('button', { name: 'Excluir troca' }));
+    expect(alert.mock.calls[0][1]).toBe(
+      `Troca de óleo e filtro, ${formatDate(tenDaysAgo)}. O registro será apagado deste aparelho. Isso não pode ser desfeito.`,
+    );
+    await press('Cancelar');
+    expect(logsQuery(db, vehicleId).all()).toHaveLength(1);
+
+    const remove = jest
+      .spyOn(repo, 'removeMaintenance')
+      .mockRejectedValueOnce(new Error('disk I/O error'));
+    await user.press(screen.getByRole('button', { name: 'Excluir troca' }));
+    await press('Excluir');
+    expect(screen.getByText('Não foi possível salvar. Tente de novo.')).toBeOnTheScreen();
+    expect(logsQuery(db, vehicleId).all()).toHaveLength(1);
+    expect(router.back).not.toHaveBeenCalled();
+    remove.mockRestore();
   });
 
   test('leaves for the garage when the log is gone', async () => {

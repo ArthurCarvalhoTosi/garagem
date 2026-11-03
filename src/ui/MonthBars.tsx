@@ -14,6 +14,9 @@ export type MonthBar = {
 type Props = { bars: MonthBar[]; accessibilityLabel: string };
 
 const PLOT = 96;
+// Twelve columns on a phone leave ~28dp each: past this the labels break mid-word. The spoken label
+// carries every value, so these short marks can stop growing.
+const MAX_SCALE = 1.3;
 const reais = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 
 /**
@@ -31,7 +34,12 @@ export function MonthBars({ bars, accessibilityLabel }: Props) {
           const height = b.cents > 0 ? Math.max(4, Math.round((PLOT * b.cents) / max)) : 0;
           return (
             <View key={b.key} testID={`bar-${b.key}`} style={styles.column}>
-              <AppText variant="caption" numberOfLines={1} style={styles.value}>
+              <AppText
+                variant="caption"
+                numberOfLines={1}
+                maxFontSizeMultiplier={MAX_SCALE}
+                style={styles.value}
+              >
                 {b.cents > 0 ? reais.format(b.cents / 100) : b.unknown ? '?' : ''}
               </AppText>
               {b.cents > 0 ? (
@@ -46,7 +54,14 @@ export function MonthBars({ bars, accessibilityLabel }: Props) {
       <View style={[styles.axis, { backgroundColor: c.line }]} />
       <View style={styles.labels}>
         {bars.map((b) => (
-          <AppText key={b.key} variant="caption" color="inkMuted" style={styles.label}>
+          <AppText
+            key={b.key}
+            variant="caption"
+            color="inkMuted"
+            numberOfLines={1}
+            maxFontSizeMultiplier={MAX_SCALE}
+            style={styles.label}
+          >
             {b.label}
           </AppText>
         ))}

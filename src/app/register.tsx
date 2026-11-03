@@ -2,8 +2,14 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { deleteRemovedPhotos, preparePhoto, readPhoto, saveWithPhoto } from '@/attachments';
+import { Alert, StyleSheet, View } from 'react-native';
+import {
+  deleteRemovedPhotos,
+  hasPhoto,
+  preparePhoto,
+  readPhoto,
+  saveWithPhoto,
+} from '@/attachments';
 import { useDb } from '@/db/provider';
 import {
   allItemsQuery,
@@ -11,11 +17,13 @@ import {
   OdometerError,
   readingsQuery,
   registerMaintenance,
+  removeMaintenance,
   updateMaintenance,
   vehiclesQuery,
 } from '@/db/repo';
 import {
   addDays,
+  formatDate,
   maskBRDate,
   MAX_KM,
   parseBRDate,
@@ -116,8 +124,10 @@ export default function Register() {
   const [saving, setSaving] = useState(false);
 
   const savedPhoto = log?.photo ?? null;
+  // A photo from another phone downloads after its row: the next sync brings it.
+  const [photoPending] = useState(() => savedPhoto !== null && !hasPhoto(savedPhoto));
   useEffect(() => {
-    if (!savedPhoto) return;
+    if (!savedPhoto || photoPending) return;
     let live = true;
     readPhoto(savedPhoto).then(
       (base64) => live && setSaved(base64),
@@ -126,7 +136,7 @@ export default function Register() {
     return () => {
       live = false;
     };
-  }, [savedPhoto]);
+  }, [savedPhoto, photoPending]);
 
   if (!start) return <Redirect href="/" />;
 
@@ -220,6 +230,36 @@ export default function Register() {
     }
   };
 
+  const remove = () => {
+    if (!log || saving) return;
+    const gone = log.photo
+      ? 'O registro e a foto do comprovante serão apagados deste aparelho.'
+      : 'O registro será apagado deste aparelho.';
+    Alert.alert(
+      'Excluir esta troca?',
+      `${start.title}, ${formatDate(log.performedAt)}. ${gone} Isso não pode ser desfeito.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: async () => {
+            setSaveError(null);
+            setSaving(true);
+            try {
+              await removeMaintenance(db, log.id);
+              deleteRemovedPhotos(db);
+              router.back(); // stays "saving" while the sheet closes
+            } catch (e) {
+              setSaving(false);
+              setSaveError(e);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const showsPhoto = photoChanged ? photo !== null : savedPhoto !== null;
   const shown = photoChanged ? photo : saved;
 
@@ -308,7 +348,7 @@ export default function Register() {
                     accessibilityLabel="Foto do comprovante"
                     style={[styles.preview, { backgroundColor: c.surface, borderColor: c.line }]}
                   />
-                ) : photoError ? null : (
+                ) : photoError || photoPending ? null : (
                   <AppText color="inkMuted">Abrindo a foto…</AppText>
                 )}
                 <View style={styles.start}>
@@ -335,8 +375,28 @@ export default function Register() {
                 />
               </View>
             )}
-            <FormError error={photoError} />
+            <FormError
+              error={
+                photoError ??
+                (photoPending && !photoChanged
+                  ? new ValidationError(
+                      'A foto ainda está vindo da nuvem. Tente de novo daqui a pouco.',
+                    )
+                  : null)
+              }
+            />
           </View>
+          {log ? (
+            <View style={styles.start}>
+              <Button
+                variant="quiet"
+                icon="trash-can-outline"
+                label="Excluir troca"
+                disabled={saving}
+                onPress={remove}
+              />
+            </View>
+          ) : null}
         </View>
       </Section>
     </Screen>
