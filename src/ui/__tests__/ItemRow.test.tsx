@@ -135,4 +135,21 @@ describe('ItemRow', () => {
     expect(screen.getByTestId(`icon-${icon}`, hidden)).toBeOnTheScreen();
     expect(screen.queryAllByTestId(/^icon-/, hidden)).toHaveLength(1);
   });
+
+  it('draws a life gauge in place of the side bar when given how much is used up', async () => {
+    await render(
+      <ItemRow name="Filtro de ar" urgency="attention" primary="Vence em 20 dias" life={0.9} />,
+    );
+
+    const gauge = screen.getByTestId('life-gauge', hidden);
+    expect(gauge.children[0]).toHaveStyle({ width: '90%' });
+    // Decorative: the label already says how close it is.
+    expect(screen.queryByTestId('life-gauge')).not.toBeOnTheScreen();
+  });
+
+  it('draws no gauge without a life value', async () => {
+    await render(<ItemRow name="Filtro de ar" urgency="ok" primary="Vence em ~6 meses" />);
+
+    expect(screen.queryByTestId('life-gauge', hidden)).not.toBeOnTheScreen();
+  });
 });

@@ -23,7 +23,9 @@ function formatKm(km: number) {
 
 type Props = { km: number; estimated?: boolean };
 
+/** Drawn on the instrument panel (`c.panel`), so its text uses the panel's ink. */
 export function Odometer({ km, estimated = false }: Props) {
+  const { c } = useTheme();
   const { fontScale } = useWindowDimensions();
   const scale = Math.min(fontScale, MAX_FONT_SCALE);
   const value = Math.max(0, Math.round(km || 0));
@@ -51,10 +53,10 @@ export function Odometer({ km, estimated = false }: Props) {
             />
           ))}
         </View>
-        <AppText style={styles.unit}>km</AppText>
+        <AppText style={[styles.unit, { color: c.panelMuted }]}>km</AppText>
       </View>
       {estimated ? (
-        <AppText variant="caption" color="inkMuted" style={styles.note}>
+        <AppText variant="caption" color="panelMuted" style={styles.note}>
           Estimativa de hoje
         </AppText>
       ) : null}
@@ -97,8 +99,8 @@ function Drum({ digit, scale, dim, inverted }: DrumProps) {
           width: DRUM_WIDTH * scale,
           height: height + 2, // + top/bottom border, so the digit window is exactly `height`
           backgroundColor: inverted ? c.drumDigit : c.drum,
-          // Same as the dark cell, so it only shows as a frame around the inverted (light) drum.
-          borderColor: c.drum,
+          // A faint rule keeps dark drums apart on the dark panel; the inverted one gets a light frame.
+          borderColor: inverted ? c.drumDigit : c.panelRule,
         },
       ]}
     >

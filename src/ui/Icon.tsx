@@ -29,6 +29,11 @@ const glyphs = {
   'chevron-right': { ios: 'chevron.right', android: 'chevron_right' },
   'chevron-down': { ios: 'chevron.down', android: 'expand_more' },
   'trash-can-outline': { ios: 'trash', android: 'delete' },
+  // Telltales for the maintenance presets; Material Symbols has no brake light, so the circled "!" stands in.
+  'air-filter': { ios: 'wind', android: 'air' },
+  'car-brake-alert': { ios: 'exclamationmark.brakesignal', android: 'error' },
+  'timing-belt': { ios: 'gearshape.2', android: 'cycle' },
+  wrench: { ios: 'wrench.and.screwdriver', android: 'build' },
   account: { ios: 'person.crop.circle', android: 'account_circle' },
   backup: { ios: 'externaldrive.badge.plus', android: 'backup' },
   restore: { ios: 'arrow.counterclockwise', android: 'settings_backup_restore' },

@@ -18,3 +18,5 @@ export { FormError } from './FormError';
 export { Section } from './Section';
 export { ListRow } from './ListRow';
 export { PlateChip } from './PlateChip';
+export { InstrumentPanel } from './InstrumentPanel';
+export type { Telltale } from './InstrumentPanel';

@@ -61,6 +61,7 @@ function AppStack() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false, title: 'Garagem' }} />
         <Stack.Screen name="onboarding" options={{ title: 'Seu carro' }} />
         <Stack.Screen name="checkup" options={{ title: 'Check-up da semana' }} />
+        <Stack.Screen name="pick-item" options={{ ...sheet, sheetAllowedDetents: [0.5, 1] }} />
         <Stack.Screen name="register" options={{ ...sheet, sheetAllowedDetents: [1] }} />
         <Stack.Screen name="adjust-km" options={{ ...sheet, sheetAllowedDetents: [0.5, 1] }} />
         <Stack.Screen name="item" options={{ ...sheet, sheetAllowedDetents: [1] }} />

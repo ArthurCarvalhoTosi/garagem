@@ -1,5 +1,5 @@
 import { addDays } from '../dates';
-import { computeDue, urgencyOf, type ItemSchedule } from '../due';
+import { computeDue, lifeUsed, urgencyOf, type ItemSchedule } from '../due';
 
 const today = '2026-10-15';
 const atToday = [{ km: 40000, readAt: today }];
@@ -207,5 +207,44 @@ describe('urgencyOf', () => {
     expect(urgencyOf(10, 5000)).toBe('critical');
     expect(urgencyOf(100, 1000)).toBe('attention');
     expect(urgencyOf(null, null)).toBe('ok');
+  });
+});
+
+describe('lifeUsed', () => {
+  // 50 km/day from 40.000 km on `today`; `at` is the day being asked about.
+  const used = (over: Partial<ItemSchedule>, at: string, readings = atToday) => {
+    const i = item(over);
+    return lifeUsed(i, computeDue(i, readings, 1500, at), at);
+  };
+
+  it('is the share of km driven for a km-only item', () => {
+    expect(used({ intervalKm: 10000 }, addDays(today, 50))).toBeCloseTo(0.25);
+  });
+
+  it('is the share of time passed for a time-only item', () => {
+    // 2026-10-15 + 12 months = 365 days.
+    expect(used({ intervalMonths: 12 }, addDays(today, 73))).toBeCloseTo(0.2);
+  });
+
+  it('follows the limit that is further along', () => {
+    // 50 days: 2.500 of 10.000 km (25%), 50 of ~182 days (~27%).
+    expect(used({ intervalKm: 10000, intervalMonths: 6 }, addDays(today, 50))).toBeCloseTo(
+      50 / 182,
+    );
+    // 100 days: 5.000 of 6.000 km (83%) beats 100 of 365 days.
+    expect(used({ intervalKm: 6000, intervalMonths: 12 }, addDays(today, 100))).toBeCloseTo(5 / 6);
+  });
+
+  it('stays at 1 past the limit and at 0 on the baseline day', () => {
+    expect(used({ intervalKm: 1000 }, addDays(today, 60))).toBe(1);
+    expect(used({ intervalKm: 10000, intervalMonths: 12 }, today)).toBe(0);
+  });
+
+  it('is 0 before a baseline set in the future', () => {
+    expect(used({ intervalMonths: 12, baselineDate: addDays(today, 10) }, today)).toBe(0);
+  });
+
+  it('is null without an interval', () => {
+    expect(used({}, today)).toBeNull();
   });
 });
