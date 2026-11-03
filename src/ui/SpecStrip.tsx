@@ -1,6 +1,6 @@
 import * as Clipboard from 'expo-clipboard';
 import { useEffect, useState } from 'react';
-import { AccessibilityInfo, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { AccessibilityInfo, Pressable, StyleSheet, View } from 'react-native';
 import { AppText } from './AppText';
 import { Button } from './Button';
 import { Icon, type IconName } from './Icon';
@@ -10,11 +10,9 @@ export type SpecItem = { key: string; icon: IconName; label: string; value: stri
 
 type Props = { items: SpecItem[]; onEdit: () => void };
 
+/** The pocket cheat sheet: one row per spec, values big enough to read at the pump. */
 export function SpecStrip({ items, onEdit }: Props) {
   const { c } = useTheme();
-  const { width, fontScale } = useWindowDimensions();
-  // One row of plaques only when there's real room (wide screen at the current text size).
-  const basis = width / fontScale >= 600 ? '20%' : '40%';
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   useEffect(() => {
@@ -22,6 +20,20 @@ export function SpecStrip({ items, onEdit }: Props) {
     const t = setTimeout(() => setCopiedKey(null), 1500);
     return () => clearTimeout(t);
   }, [copiedKey]);
+
+  // Nothing filled in: one invitation instead of a row of empty slots.
+  if (items.every((i) => !i.value)) {
+    return (
+      <View style={styles.invite}>
+        <AppText color="inkMuted">
+          {`Guarde ${listOf(items.map((i) => i.label.toLowerCase()))} para consultar no posto.`}
+        </AppText>
+        <View style={styles.start}>
+          <Button variant="secondary" label="Adicionar" icon="plus" onPress={onEdit} />
+        </View>
+      </View>
+    );
+  }
 
   const copy = async (item: SpecItem & { value: string }) => {
     await Clipboard.setStringAsync(item.value);
@@ -31,19 +43,15 @@ export function SpecStrip({ items, onEdit }: Props) {
 
   return (
     <View>
-      <View style={styles.grid}>
-        {items.map((item) => {
+      <View style={[styles.box, { borderColor: c.line, backgroundColor: c.surface }]}>
+        {items.map((item, i) => {
           const { value } = item;
-          const plaqueStyle = ({ pressed }: { pressed: boolean }) =>
-            [
-              styles.plaque,
-              {
-                flexBasis: basis,
-                borderColor: c.line,
-                backgroundColor: pressed ? c.line : c.surface,
-              },
-            ] as const;
-          const icon = <Icon name={item.icon} size={20} color={c.inkMuted} />;
+          const rowStyle = ({ pressed }: { pressed: boolean }) => [
+            styles.row,
+            i > 0 && { borderTopWidth: 1, borderTopColor: c.line },
+            pressed && { backgroundColor: c.line },
+          ];
+          const icon = <Icon name={item.icon} size={22} color={c.inkMuted} />;
 
           if (!value) {
             return (
@@ -52,17 +60,15 @@ export function SpecStrip({ items, onEdit }: Props) {
                 onPress={onEdit}
                 accessibilityRole="button"
                 accessibilityLabel={`${item.label}: Adicionar`}
-                style={plaqueStyle}
+                style={rowStyle}
               >
                 {icon}
-                <View style={styles.text}>
-                  <AppText variant="bodyStrong" color="primary">
-                    Adicionar
-                  </AppText>
-                  <AppText variant="caption" color="inkMuted">
-                    {item.label}
-                  </AppText>
-                </View>
+                <AppText color="inkMuted" style={styles.label}>
+                  {item.label}
+                </AppText>
+                <AppText variant="bodyStrong" color="primary">
+                  Adicionar
+                </AppText>
               </Pressable>
             );
           }
@@ -76,38 +82,45 @@ export function SpecStrip({ items, onEdit }: Props) {
               accessibilityHint="Toque longo para copiar"
               accessibilityActions={[{ name: 'longpress', label: 'Copiar' }]}
               onAccessibilityAction={() => copy({ ...item, value })}
-              style={plaqueStyle}
+              style={rowStyle}
             >
               {icon}
-              <View style={styles.text}>
-                <AppText variant="number">{value}</AppText>
-                <AppText variant="caption" color={copied ? 'ok' : 'inkMuted'}>
-                  {copied ? 'Copiado' : item.label}
-                </AppText>
-              </View>
+              <AppText color={copied ? 'ok' : 'inkMuted'} style={styles.label}>
+                {copied ? 'Copiado' : item.label}
+              </AppText>
+              <AppText variant="number" style={styles.value}>
+                {value}
+              </AppText>
             </Pressable>
           );
         })}
       </View>
-      <View style={styles.edit}>
+      <View style={styles.end}>
         <Button variant="quiet" label="Editar" icon="pencil" onPress={onEdit} />
       </View>
     </View>
   );
 }
 
+// "a, b, c e d"
+function listOf(words: string[]) {
+  return words.length < 2 ? words.join('') : `${words.slice(0, -1).join(', ')} e ${words.at(-1)}`;
+}
+
 const styles = StyleSheet.create({
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.s },
-  plaque: {
-    flexGrow: 1,
-    minHeight: 48,
+  invite: { gap: space.m },
+  start: { alignItems: 'flex-start' },
+  box: { borderWidth: 1, borderRadius: radius.plaque, overflow: 'hidden' },
+  row: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: space.s,
-    padding: space.m,
-    borderWidth: 1,
-    borderRadius: radius.plaque,
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: space.m,
+    minHeight: 52,
+    paddingVertical: space.s,
+    paddingHorizontal: space.m,
   },
-  text: { flex: 1 },
-  edit: { alignItems: 'flex-end' },
+  label: { flex: 1, minWidth: 96 },
+  value: { flexShrink: 1, textAlign: 'right' },
+  end: { alignItems: 'flex-end' },
 });

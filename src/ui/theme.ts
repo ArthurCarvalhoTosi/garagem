@@ -15,8 +15,19 @@ const light = {
   attentionTint: '#FDF3DC',
   ok: '#2D6A4F',
   okTint: '#E4F1EA',
-  drum: '#1B2226',
+  // Instrument panel: a dark cluster in both themes, the one loud element on the Painel.
+  panel: '#161C20',
+  panelInk: '#E6EAEA',
+  panelMuted: '#9AA6AE',
+  panelRule: '#2B343A',
+  drum: '#0B0F11',
   drumDigit: '#F4F4EE',
+  // Telltale lights on the panel: lit ones pass 3:1 on `panel`; an off one is meant to recede.
+  telltaleOff: '#3A444B',
+  telltaleAmber: '#F2B132',
+  telltaleRed: '#FF5449',
+  // Empty part of a life gauge.
+  track: '#E3E8EA',
   // Pill behind the selected tab icon.
   navIndicator: '#D5DEF6',
   // A plate is white with the blue band in any theme.
@@ -48,8 +59,16 @@ const dark: Colors = {
   attentionTint: '#3A2E14',
   ok: '#74C69D',
   okTint: '#16302A',
-  drum: '#262E34',
+  panel: '#0A0E10',
+  panelInk: '#E6EAEA',
+  panelMuted: '#9AA6AE',
+  panelRule: '#2B343A',
+  drum: '#000000',
   drumDigit: '#F4F4EE',
+  telltaleOff: '#2B343A',
+  telltaleAmber: '#F2B132',
+  telltaleRed: '#FF5449',
+  track: '#2B343A',
   navIndicator: '#2A3966',
   plateBody: '#FFFFFF',
   plateInk: '#1B2226',
@@ -70,6 +89,7 @@ export const type = {
   display: { fontFamily: 'Barlow_700Bold', fontSize: 28, lineHeight: 34 },
   number: { fontFamily: 'BarlowCondensed_600SemiBold', fontSize: 20, lineHeight: 24 },
   plate: { fontFamily: 'BarlowCondensed_600SemiBold', fontSize: 22, lineHeight: 28 },
+  status: { fontFamily: 'Barlow_600SemiBold', fontSize: 19, lineHeight: 26 },
   odometer: { fontFamily: 'BarlowCondensed_600SemiBold', fontSize: 44, lineHeight: 52 },
 } satisfies Record<string, TextStyle>;
 
@@ -77,7 +97,7 @@ export type TypeVariant = keyof typeof type;
 
 export const space = { xs: 4, s: 8, m: 12, l: 16, xl: 24, xxl: 32, xxxl: 48 };
 
-export const radius = { button: 10, plaque: 6, drum: 3, row: 0 };
+export const radius = { panel: 16, button: 10, plaque: 6, drum: 3, row: 0 };
 
 export function useTheme() {
   const c = useColorScheme() === 'dark' ? dark : light;

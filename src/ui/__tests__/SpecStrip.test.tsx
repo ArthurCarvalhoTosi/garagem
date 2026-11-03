@@ -44,4 +44,16 @@ describe('SpecStrip', () => {
 
     expect(onEdit).toHaveBeenCalledTimes(1);
   });
+
+  it('invites to fill in when every value is empty', async () => {
+    const onEdit = jest.fn();
+    const empty = items.map((i) => ({ ...i, value: null }));
+    await render(<SpecStrip items={empty} onEdit={onEdit} />);
+
+    expect(screen.getByText('Guarde óleo e calibragem para consultar no posto.')).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Óleo: Adicionar' })).not.toBeOnTheScreen();
+    await userEvent.setup().press(screen.getByRole('button', { name: 'Adicionar' }));
+
+    expect(onEdit).toHaveBeenCalledTimes(1);
+  });
 });

@@ -28,10 +28,12 @@ test('redirects to onboarding when there is no vehicle', async () => {
 
 test('shows an overdue item with "Registrar troca" and a stale-KM hint', async () => {
   // 400 days at ~1.000 km/month: oil (10.000 km / 12 months) passed its km limit first, ~3.333 km ago.
-  const { oilId } = await seedVehicle(db, addDays(todayISO(), -400));
+  const { vehicleId, oilId } = await seedVehicle(db, addDays(todayISO(), -400));
   await render(<Dashboard />);
 
-  expect(screen.getByRole('header', { name: 'Precisa de atenção' })).toBeOnTheScreen();
+  // The panel names the worst item; the list below has every item.
+  expect(screen.getByText(/^Troca de óleo e filtro, passou 3\.33\d km$/)).toBeOnTheScreen();
+  expect(screen.getByRole('header', { name: 'Próximas trocas' })).toBeOnTheScreen();
   // The km past the limit, not a day count estimated from the km/day.
   expect(
     screen.getByRole('button', { name: /^Troca de óleo e filtro\. Crítico\. Passou 3\.33\d km$/ }),
@@ -39,15 +41,19 @@ test('shows an overdue item with "Registrar troca" and a stale-KM hint', async (
   expect(screen.getByText(/Faz mais de 30 dias que o KM não é atualizado/)).toBeOnTheScreen();
   expect(screen.queryByText('Tudo em dia.')).not.toBeOnTheScreen();
 
-  await userEvent.setup().press(screen.getByRole('button', { name: 'Registrar troca' }));
+  // The critical row's own button, then the footer's, which asks which item first.
+  const [rowButton, footerButton] = screen.getAllByRole('button', { name: 'Registrar troca' });
+  await userEvent.setup().press(rowButton);
   expect(router.push).toHaveBeenCalledWith({ pathname: '/register', params: { itemId: oilId } });
+  await userEvent.setup().press(footerButton);
+  expect(router.push).toHaveBeenCalledWith({ pathname: '/pick-item', params: { vehicleId } });
   await userEvent
     .setup()
     .press(screen.getByRole('button', { name: 'Editar Troca de óleo e filtro' }));
   expect(router.push).toHaveBeenCalledWith({ pathname: '/item', params: { itemId: oilId } });
 });
 
-test('shows the all-clear state with the next item, and expands ok items', async () => {
+test('shows the all-clear state in the panel and every item in the list', async () => {
   const { vehicleId } = await seedVehicle(db);
   await upsertSpecs(db, vehicleId, { tireFrontPsi: 32, tireRearPsi: 30 });
   await render(<Dashboard />);
@@ -61,12 +67,8 @@ test('shows the all-clear state with the next item, and expands ok items', async
   expect(screen.getByLabelText('Calibragem: 32 / 30 psi')).toBeOnTheScreen();
   expect(screen.getByRole('button', { name: 'Óleo: Adicionar' })).toBeOnTheScreen();
 
-  expect(
-    screen.queryByRole('button', { name: /^Troca de óleo e filtro\. Em dia/ }),
-  ).not.toBeOnTheScreen();
-  expect(screen.getByRole('button', { name: 'Em dia (1)' })).toBeCollapsed();
-  await user.press(screen.getByRole('button', { name: 'Em dia (1)' }));
-  expect(screen.getByRole('button', { name: 'Em dia (1)' })).toBeExpanded();
+  // Ok items stay in view: no "Em dia (n)" toggle to open first.
+  expect(screen.queryByRole('button', { name: /^Em dia/ })).not.toBeOnTheScreen();
   await user.press(screen.getByRole('button', { name: /^Troca de óleo e filtro\. Em dia/ }));
   expect(router.push).toHaveBeenCalledWith({
     pathname: '/register',
@@ -87,7 +89,8 @@ test('shows the selected car, whose sheets get its id, and offers the car list o
   expect(screen.getByLabelText('Hodômetro estimado: 80.000 quilômetros')).toBeOnTheScreen();
   await user.press(screen.getByRole('button', { name: 'Ajustar KM' }));
   expect(router.push).toHaveBeenCalledWith({ pathname: '/adjust-km', params: { vehicleId: gol } });
-  await user.press(screen.getByRole('button', { name: 'Óleo: Adicionar' }));
+  // No specs yet: one invitation instead of an empty slot per spec.
+  await user.press(screen.getByRole('button', { name: 'Adicionar' }));
   expect(router.push).toHaveBeenCalledWith({ pathname: '/specs', params: { vehicleId: gol } });
   await user.press(screen.getByRole('button', { name: 'Adicionar manutenção' }));
   expect(router.push).toHaveBeenCalledWith({ pathname: '/item', params: { vehicleId: gol } });
