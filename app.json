@@ -61,6 +61,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "567e36fa-f962-4baa-8d26-00f1f0ef47fa"
+      }
+    },
+    "owner": "act-tech-software"
   }
 }
