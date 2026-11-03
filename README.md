@@ -20,7 +20,7 @@ Alternativa sem toolchain local: `eas build --profile development`.
   ```
   cmake.dir=C\:\\Users\\<você>\\AppData\\Local\\Android\\Sdk\\cmake\\3.31.6
   ```
-  (`android/` é gerado pelo `expo prebuild`; refaça este passo após `prebuild --clean`.) O registro `LongPathsEnabled` do Windows também precisa estar em 1.
+  (`android/` é gerado pelo `expo prebuild`; refaça este passo depois de qualquer `prebuild`, que apaga o `local.properties`.) O registro `LongPathsEnabled` do Windows também precisa estar em 1.
 
 ## Testar
 
