@@ -20,6 +20,7 @@ import {
   dossierHtml,
   findModel,
   formatDate,
+  logsCsv,
   modelYears,
   todayISO,
   ValidationError,
@@ -50,6 +51,8 @@ export default function Dossier() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [validity, setValidity] = useState<number>(30);
+  const [exporting, setExporting] = useState(false);
+  const [csvError, setCsvError] = useState<unknown>(null);
   const [linking, setLinking] = useState(false);
   const [linkError, setLinkError] = useState<unknown>(null);
   const [links, setLinks] = useState<DossierLink[] | 'failed' | null>(null);
@@ -65,16 +68,13 @@ export default function Dossier() {
     .all()
     .some((l) => l.photo);
 
-  const buildHtml = async (photos: boolean) => {
-    const model = vehicle.modelRef ? findModel(vehicle.modelRef) : undefined;
-    const last = readingsQuery(db, vehicle.id).all().at(-1);
-    const logs = logsQuery(db, vehicle.id).all();
-    return dossierHtml({
-      nickname: vehicle.nickname,
-      model: model ? `${model.brand} ${model.model} ${model.engine}, ${modelYears(model)}` : null,
-      lastReading: last ? { km: last.km, readAt: last.readAt } : null,
-      logs: await Promise.all(
-        logs.map(async (l) => ({
+  // What the PDF and the spreadsheet both show of each log.
+  const records = () =>
+    logsQuery(db, vehicle.id)
+      .all()
+      .map((l) => ({
+        log: l,
+        record: {
           name: l.itemName ?? 'Manutenção',
           performedAt: l.performedAt,
           km: l.km,
@@ -82,7 +82,20 @@ export default function Dossier() {
           brandSpec: l.brandSpec,
           registeredOn: todayISO(new Date(l.createdAt)),
           hasReceipt: l.photo !== null,
-          photo: photos && l.photo ? await readPhoto(l.photo) : null,
+        },
+      }));
+
+  const buildHtml = async (photos: boolean) => {
+    const model = vehicle.modelRef ? findModel(vehicle.modelRef) : undefined;
+    const last = readingsQuery(db, vehicle.id).all().at(-1);
+    return dossierHtml({
+      nickname: vehicle.nickname,
+      model: model ? `${model.brand} ${model.model} ${model.engine}, ${modelYears(model)}` : null,
+      lastReading: last ? { km: last.km, readAt: last.readAt } : null,
+      logs: await Promise.all(
+        records().map(async ({ log, record }) => ({
+          ...record,
+          photo: photos && log.photo ? await readPhoto(log.photo) : null,
         })),
       ),
       generatedOn: todayISO(),
@@ -117,6 +130,32 @@ export default function Dossier() {
         // Left in the cache folder, which the system clears; nothing the user can act on.
       }
       setBusy(false);
+    }
+  };
+
+  const exportCsv = async () => {
+    if (exporting) return;
+    setExporting(true);
+    setCsvError(null);
+    const file = new File(Paths.cache, `${dossierFileName(vehicle.nickname, todayISO())}.csv`);
+    try {
+      file.write(logsCsv(records().map(({ log, record }) => ({ ...record, notes: log.notes }))));
+      await Sharing.shareAsync(file.uri, {
+        mimeType: 'text/csv',
+        UTI: 'public.comma-separated-values-text',
+        dialogTitle: 'Enviar planilha',
+      });
+      router.back();
+    } catch {
+      setCsvError(new ValidationError('Não foi possível gerar a planilha. Tente de novo.'));
+    } finally {
+      // Not encrypted, with notes: it only lives while the share sheet is open.
+      try {
+        if (file.exists) file.delete();
+      } catch {
+        // Left in the cache folder, which the system clears.
+      }
+      setExporting(false);
     }
   };
 
@@ -196,6 +235,25 @@ export default function Dossier() {
           ) : null}
           <FormError error={error} />
           <Button label="Gerar e enviar PDF" loading={busy} onPress={share} />
+        </View>
+      </Section>
+
+      <Section title="Planilha">
+        <View style={styles.body}>
+          <AppText>
+            Todas as trocas numa planilha, com as observações e sem as fotos. Abre no Excel e no
+            Google Planilhas.
+          </AppText>
+          <AppText color="inkMuted">
+            A planilha não tem senha: quem receber o arquivo lê tudo o que está nele.
+          </AppText>
+          <FormError error={csvError} />
+          <Button
+            variant="secondary"
+            label="Exportar planilha (CSV)"
+            loading={exporting}
+            onPress={exportCsv}
+          />
         </View>
       </Section>
 

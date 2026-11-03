@@ -40,6 +40,7 @@ const URL = 'https://garagem.acttechsoftware.com.br/d#AAAAAAAAAAAAAAAAAAAAAA';
 
 // Files live in a Set so a test can tell what is still on "mockDisk".
 const mockDisk = new Set<string>();
+const mockWritten = new Map<string, string>();
 jest.mock('expo-file-system', () => {
   class File {
     uri: string;
@@ -57,6 +58,10 @@ jest.mock('expo-file-system', () => {
     }
     delete() {
       mockDisk.delete(this.uri);
+    }
+    write(content: string) {
+      mockDisk.add(this.uri);
+      mockWritten.set(this.uri, content);
     }
   }
   return { File, Paths: { cache: { uri: 'file:///cache' } } };
@@ -152,6 +157,32 @@ test('explains a failure plainly, stays open and leaves no file behind', async (
 
   expect(screen.getByText('Não foi possível gerar o PDF. Tente de novo.')).toBeOnTheScreen();
   expect(screen.queryByText(/Activity/)).not.toBeOnTheScreen();
+  expect(mockDisk.size).toBe(0);
+  expect(router.back).not.toHaveBeenCalled();
+});
+
+test('exports every log as a spreadsheet, with notes, then deletes it and closes', async () => {
+  await log(PHOTO);
+  await render(<Dossier />);
+  await userEvent.setup().press(screen.getByRole('button', { name: 'Exportar planilha (CSV)' }));
+
+  const file = `file:///cache/Historico-Meu-Sandero-${todayISO()}.csv`;
+  expect(shareMock).toHaveBeenCalledWith(file, expect.objectContaining({ mimeType: 'text/csv' }));
+  const csv = mockWritten.get(file)!;
+  expect(csv).toContain(';40800;Troca de óleo e filtro;199,00;;Ligar para o mecânico;');
+  expect(csv.endsWith(';Sim\r\n')).toBe(true);
+  expect(attachmentsMock.readPhoto).not.toHaveBeenCalled();
+  expect(mockDisk.size).toBe(0);
+  expect(router.back).toHaveBeenCalled();
+});
+
+test('a failed spreadsheet export reads plainly and leaves no file behind', async () => {
+  await log();
+  shareMock.mockRejectedValueOnce(new Error('Activity not found'));
+  await render(<Dossier />);
+  await userEvent.setup().press(screen.getByRole('button', { name: 'Exportar planilha (CSV)' }));
+
+  expect(screen.getByText('Não foi possível gerar a planilha. Tente de novo.')).toBeOnTheScreen();
   expect(mockDisk.size).toBe(0);
   expect(router.back).not.toHaveBeenCalled();
 });
