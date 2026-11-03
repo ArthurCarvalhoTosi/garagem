@@ -241,8 +241,11 @@ export default function Dossier() {
       <Section title="Planilha">
         <View style={styles.body}>
           <AppText>
-            Todas as trocas numa planilha (CSV) que abre no Excel ou no Google Planilhas, com as
-            observações e sem as fotos. A planilha não é protegida por senha.
+            Todas as trocas numa planilha, com as observações e sem as fotos. Abre no Excel e no
+            Google Planilhas.
+          </AppText>
+          <AppText color="inkMuted">
+            A planilha não tem senha: quem receber o arquivo lê tudo o que está nele.
           </AppText>
           <FormError error={csvError} />
           <Button
