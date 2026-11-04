@@ -1,5 +1,5 @@
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
-import { CAR_MODELS, MAX_KM, modelSpecs, READING_ERRORS, ValidationError } from '@/domain';
+import { CAR_MODELS, MAX_KM, modelSpecs, ValidationError } from '@/domain';
 import type { Db } from '../client';
 import {
   addItem,
@@ -107,7 +107,7 @@ async function expectValidation(p: Promise<unknown>, message: string) {
 function expectOdometerError(err: unknown, check: 'below_previous' | 'above_next') {
   expect(err).toBeInstanceOf(OdometerError);
   expect(err).toBeInstanceOf(ValidationError);
-  expect(err).toMatchObject({ check, message: READING_ERRORS[check] });
+  expect(err).toMatchObject({ check });
 }
 
 describe('createVehicle', () => {
@@ -318,6 +318,15 @@ describe('addOdometerReading', () => {
       expectOdometerError(
         await rejection(addOdometerReading(db, vehicleId, 41100, '2026-10-15', 'adjust')),
         'below_previous',
+      );
+    });
+
+    test('the rejection names the reading in the way, so the user can find it', async () => {
+      const { vehicleId } = await seedOverestimatedLog();
+      const err = await rejection(addOdometerReading(db, vehicleId, 41100, '2026-10-15', 'adjust'));
+      expect(err).toMatchObject({ blocking: expect.objectContaining({ source: 'log' }) });
+      expect((err as Error).message).toBe(
+        'Esse KM é menor que o de uma leitura anterior: 43.200 km em 1 de out. de 2026 (Troca de óleo). Confira o valor.',
       );
     });
 

@@ -94,11 +94,28 @@ test('rejects a KM below an earlier reading', async () => {
   // Correcting an earlier reading lives in Ajustar KM, behind a confirmation.
   expect(
     screen.getByText(
-      'Esse KM é menor que uma leitura anterior. Confira o valor. Se o KM salvo antes estava errado, corrija em Ajustar KM.',
+      `Esse KM é menor que o de uma leitura anterior: 40.000 km em ${formatDate(since)} (cadastro do carro). Confira o valor. Se o KM salvo antes estava errado, corrija em Ajustar KM.`,
     ),
   ).toBeOnTheScreen();
   expect(logsQuery(db, vehicleId).all()).toEqual([]);
   expect(router.back).not.toHaveBeenCalled();
+});
+
+test('names the maintenance in the way and points to Histórico', async () => {
+  const day = addDays(todayISO(), -5);
+  await registerMaintenance(db, { vehicleId, itemId: oilId, performedAt: day, km: 45000 });
+  await render(<Register />);
+  const user = userEvent.setup();
+
+  await user.clear(kmField());
+  await user.type(kmField(), '44000');
+  await user.press(screen.getByRole('button', { name: 'Registrar troca' }));
+
+  expect(
+    screen.getByText(
+      `Esse KM é menor que o de uma leitura anterior: 45.000 km em ${formatDate(day)} (Troca de óleo e filtro). Confira o valor. Se aquele registro estava errado, corrija no Histórico.`,
+    ),
+  ).toBeOnTheScreen();
 });
 
 test('rejects a KM too high to be real', async () => {
@@ -381,7 +398,7 @@ describe('editing a log', () => {
     await user.type(kmField(), '39000');
     await user.press(screen.getByRole('button', { name: 'Salvar alterações' }));
 
-    expect(screen.getByText(/^Esse KM é menor que uma leitura anterior/)).toBeOnTheScreen();
+    expect(screen.getByText(/^Esse KM é menor que o de uma leitura anterior/)).toBeOnTheScreen();
     expect(logsQuery(db, vehicleId).all()).toEqual([expect.objectContaining({ km: 52000 })]);
     expect(router.back).not.toHaveBeenCalled();
   });

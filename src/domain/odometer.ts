@@ -1,4 +1,5 @@
 import { addDays, daysBetween, type ISODate } from './dates';
+import { formatDate, formatKm } from './format';
 
 export interface OdometerReading {
   km: number;
@@ -73,15 +74,35 @@ export const READING_ERRORS: Record<Exclude<ReadingCheck, 'ok'>, string> = {
   above_next: 'Esse KM é maior que uma leitura de data posterior. Confira o valor ou a data.',
 };
 
+/** The saved reading a new one clashes with: the highest before it, else the lowest after it. */
+export function blockingReading<R extends OdometerReading>(
+  readings: R[],
+  km: number,
+  readAt: ISODate,
+): R | undefined {
+  const before = readings.filter((r) => r.readAt <= readAt && r.km > km);
+  if (before.length) return before.reduce((a, b) => (b.km > a.km ? b : a));
+  const after = readings.filter((r) => r.readAt > readAt && r.km < km);
+  return after.length ? after.reduce((a, b) => (b.km < a.km ? b : a)) : undefined;
+}
+
 export function checkReading(
   readings: OdometerReading[],
   km: number,
   readAt: ISODate,
 ): ReadingCheck {
-  // Math.max() of nothing is -Infinity and Math.min() is Infinity, so empty sides never fail.
-  const prevMax = Math.max(...readings.filter((r) => r.readAt <= readAt).map((r) => r.km));
-  if (km < prevMax) return 'below_previous';
-  const nextMin = Math.min(...readings.filter((r) => r.readAt > readAt).map((r) => r.km));
-  if (km > nextMin) return 'above_next';
-  return 'ok';
+  const r = blockingReading(readings, km, readAt);
+  return !r ? 'ok' : r.readAt <= readAt ? 'below_previous' : 'above_next';
+}
+
+/** `what`: where that reading came from, such as the maintenance it was saved with. */
+export function readingConflictMessage(
+  check: Exclude<ReadingCheck, 'ok'>,
+  blocking: OdometerReading,
+  what: string,
+): string {
+  const saved = `${formatKm(blocking.km)} em ${formatDate(blocking.readAt)} (${what})`;
+  return check === 'below_previous'
+    ? `Esse KM é menor que o de uma leitura anterior: ${saved}. Confira o valor.`
+    : `Esse KM é maior que o de uma data posterior: ${saved}. Confira o valor ou a data.`;
 }

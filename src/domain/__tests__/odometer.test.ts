@@ -1,5 +1,6 @@
 import {
   MONTHLY_KM_OPTIONS,
+  blockingReading,
   checkReading,
   dailyRate,
   isProjectionStale,
@@ -106,5 +107,14 @@ describe('checkReading', () => {
 
   it('treats a same-day reading as previous', () => {
     expect(checkReading(readings, 11999, '2026-10-01')).toBe('below_previous');
+  });
+});
+
+describe('blockingReading', () => {
+  it('names the highest earlier reading, else the lowest later one', () => {
+    const readings = [r(10000, '2026-09-01'), r(12000, '2026-09-20'), r(11000, '2026-10-01')];
+    expect(blockingReading(readings, 9000, '2026-10-01')).toEqual(r(12000, '2026-09-20'));
+    expect(blockingReading(readings, 11500, '2026-09-10')).toEqual(r(11000, '2026-10-01'));
+    expect(blockingReading(readings, 13000, '2026-10-02')).toBeUndefined();
   });
 });
