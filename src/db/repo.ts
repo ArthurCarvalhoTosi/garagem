@@ -16,12 +16,13 @@ import {
   sql,
 } from 'drizzle-orm';
 import {
-  checkReading,
+  blockingReading,
   findModel,
   MAX_KM,
   modelSpecs,
   projectOdometer,
   READING_ERRORS,
+  readingConflictMessage,
   ValidationError,
   type ISODate,
 } from '@/domain';
@@ -43,10 +44,18 @@ const NOTIFICATION_PROMPT = 'notificationPromptAnswered';
 // updatedAt is refreshed on every update by $onUpdateFn in schema.ts.
 
 export class OdometerError extends ValidationError {
-  constructor(public check: 'below_previous' | 'above_next') {
-    super(READING_ERRORS[check]);
+  /** `blocking`: the saved reading in the way, named so the user can find it. */
+  constructor(
+    public check: 'below_previous' | 'above_next',
+    public blocking?: { km: number; readAt: ISODate; source: string; what: string },
+  ) {
+    super(
+      blocking ? readingConflictMessage(check, blocking, blocking.what) : READING_ERRORS[check],
+    );
   }
 }
+
+const READING_SOURCE = { onboarding: 'cadastro do carro', adjust: 'Ajustar KM' } as const;
 
 // --- Input validation ---
 
@@ -202,8 +211,15 @@ export function specsQuery(db: Db, vehicleId: string) {
 /** `exceptId`: a reading being moved, checked against the others only. */
 function assertReading(db: Db, vehicleId: string, km: number, readAt: ISODate, exceptId?: string) {
   const readings = db
-    .select({ km: odometerReadings.km, readAt: odometerReadings.readAt })
+    .select({
+      km: odometerReadings.km,
+      readAt: odometerReadings.readAt,
+      source: odometerReadings.source,
+      itemName: maintenanceItems.name,
+    })
     .from(odometerReadings)
+    .leftJoin(maintenanceLogs, eq(maintenanceLogs.id, odometerReadings.logId))
+    .leftJoin(maintenanceItems, eq(maintenanceItems.id, maintenanceLogs.itemId))
     .where(
       and(
         eq(odometerReadings.vehicleId, vehicleId),
@@ -212,8 +228,16 @@ function assertReading(db: Db, vehicleId: string, km: number, readAt: ISODate, e
       ),
     )
     .all();
-  const check = checkReading(readings, km, readAt);
-  if (check !== 'ok') throw new OdometerError(check);
+  const blocking = blockingReading(readings, km, readAt);
+  if (!blocking) return;
+  const what =
+    blocking.source === 'log'
+      ? (blocking.itemName ?? 'Manutenção')
+      : READING_SOURCE[blocking.source];
+  throw new OdometerError(blocking.readAt <= readAt ? 'below_previous' : 'above_next', {
+    ...blocking,
+    what,
+  });
 }
 
 function assertVehicle(db: Db, vehicleId: string) {

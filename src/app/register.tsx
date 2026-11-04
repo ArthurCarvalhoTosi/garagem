@@ -30,7 +30,6 @@ import {
   parseBRL,
   parseIntBR,
   projectOdometer,
-  READING_ERRORS,
   todayISO,
   ValidationError,
   type ISODate,
@@ -223,10 +222,12 @@ export default function Register() {
       if (!(e instanceof OdometerError)) return setSaveError(e);
       // Fixing an earlier reading discards data, so it only happens in Ajustar KM, after a confirmation.
       const fix =
-        e.check === 'below_previous'
-          ? ' Se o KM salvo antes estava errado, corrija em Ajustar KM.'
-          : '';
-      setErrors({ km: READING_ERRORS[e.check] + fix });
+        e.blocking?.source === 'log'
+          ? ' Se aquele registro estava errado, corrija no Histórico.'
+          : e.check === 'below_previous'
+            ? ' Se o KM salvo antes estava errado, corrija em Ajustar KM.'
+            : '';
+      setErrors({ km: e.message + fix });
     }
   };
 
