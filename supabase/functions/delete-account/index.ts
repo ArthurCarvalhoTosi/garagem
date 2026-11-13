@@ -1,5 +1,6 @@
 import '@supabase/functions-js/edge-runtime.d.ts';
 import { withSupabase } from '@supabase/server';
+import { sessionUserId } from '../_shared/session.ts';
 import { type AccountStore, handleDeleteAccount } from './handler.ts';
 
 const BUCKET = 'attachments';
@@ -8,6 +9,8 @@ export default {
   // 'user': only the account's own session deletes it. ctx.supabaseAdmin (service role) is what
   // may delete the key, the files and the user.
   fetch: withSupabase({ auth: 'user' }, async (req, ctx) => {
+    const userId = sessionUserId(ctx.jwtClaims);
+    if (!userId) return Response.json({ error: 'unauthorized' }, { status: 401 });
     const admin = ctx.supabaseAdmin;
     const store: AccountStore = {
       async deleteKey(userId) {
@@ -33,7 +36,7 @@ export default {
     };
 
     try {
-      return await handleDeleteAccount(req, ctx.userClaims!.id, store);
+      return await handleDeleteAccount(req, userId, store);
     } catch (e) {
       console.error('delete-account failed:', e instanceof Error ? e.message : 'unknown');
       return Response.json({ error: 'internal' }, { status: 500 });

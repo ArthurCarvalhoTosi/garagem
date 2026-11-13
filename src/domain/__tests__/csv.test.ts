@@ -28,6 +28,13 @@ test('a cell with a separator, quote or line break is quoted', () => {
   expect(csv).toContain(';Shell;"Oficina ""do Zé""; troquei\no filtro";');
 });
 
+test('text that starts like a formula is shown, not run', () => {
+  const csv = logsCsv([
+    log({ notes: '=HYPERLINK("http://x")', brandSpec: '+1', name: '@SUM(A1)' }),
+  ]);
+  expect(csv).toContain(`;'@SUM(A1);1234,50;'+1;"'=HYPERLINK(""http://x"")";`);
+});
+
 test('no logs: only the header', () => {
   expect(logsCsv([]).slice(1)).toBe(
     'Data;Km;Manutenção;Custo (R$);Marca/especificação;Observações;Registrado em;Com comprovante\r\n',

@@ -22,6 +22,8 @@ const VERSION = 1;
 // OWASP's Argon2id minimum (19 MiB, 2 passes). Pure JS on the phone: a few seconds, once per file.
 const KDF = { name: 'argon2id', m: 19456, t: 2, p: 1 } as const;
 export const MIN_PASSWORD = 8;
+const MAX_FILE_BYTES = 512 * 1024 * 1024;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 type Header = { format: string; version: number; kdf: typeof KDF & { salt: string } };
 
@@ -75,7 +77,10 @@ export async function createBackupFile(db: Db, password: string, today: ISODate)
 
 /** Opens a backup file; throws ValidationError (BACKUP_ERRORS) for anything that isn't a readable backup. */
 export async function readBackupFile(uri: string, password: string): Promise<Backup> {
-  const bytes = await new File(uri).bytes();
+  const source = new File(uri);
+  // Far above any real backup (each photo is a few hundred KB); a huge file isn't read whole.
+  if (source.size > MAX_FILE_BYTES) throw new ValidationError(BACKUP_ERRORS.notBackup);
+  const bytes = await source.bytes();
   // A header longer than this isn't ours; also keeps a big unrelated file from being parsed whole.
   const newline = bytes.subarray(0, 1024).indexOf(0x0a);
   let header: Header | undefined;
@@ -86,7 +91,10 @@ export async function readBackupFile(uri: string, password: string): Promise<Bac
   }
   if (!header || header.format !== FORMAT) throw new ValidationError(BACKUP_ERRORS.notBackup);
   if (header.version > VERSION) throw new ValidationError(BACKUP_ERRORS.newer);
-  if (header.kdf?.name !== KDF.name) throw new ValidationError(BACKUP_ERRORS.notBackup);
+  // The cost runs before GCM can authenticate the header, so a file must not choose it.
+  const { kdf } = header;
+  if (kdf?.name !== KDF.name || kdf.m !== KDF.m || kdf.t !== KDF.t || kdf.p !== KDF.p)
+    throw new ValidationError(BACKUP_ERRORS.notBackup);
 
   let payload: Payload;
   try {
@@ -125,13 +133,15 @@ export async function restoreBackup(db: Db, backup: Backup): Promise<void> {
   try {
     const attachments = [];
     for (const a of backup.rows.attachments ?? []) {
-      const photo = backup.photos[a.filePath];
+      // The file's path is never trusted: the app later deletes files by it (as sync, @/db/sync).
+      if (!UUID.test(a.id)) throw new ValidationError(BACKUP_ERRORS.notBackup);
+      const photo = Object.hasOwn(backup.photos, a.filePath) ? backup.photos[a.filePath] : null;
       if (a.deletedAt === null && photo) {
         const saved = await writePhoto(photo);
         written.push(saved.filePath);
         attachments.push({ ...a, filePath: saved.filePath, sizeBytes: saved.sizeBytes });
       } else {
-        attachments.push(a);
+        attachments.push({ ...a, filePath: `attachments/${a.id}.bin` });
       }
     }
     await replaceAllData(db, { ...backup.rows, attachments });
@@ -153,6 +163,8 @@ function deriveKey(password: string, salt: Uint8Array, kdf: { m: number; t: numb
 }
 
 function discard(filePath: string) {
+  // Only photo files, like @/attachments' deletes: older versions kept paths from backup files.
+  if (!/^attachments\/[\w-]+\.bin$/.test(filePath)) return;
   try {
     const f = new File(Paths.document, filePath);
     if (f.exists) f.delete();

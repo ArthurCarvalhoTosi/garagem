@@ -25,7 +25,8 @@ function backend(photos: number, fail?: keyof AccountStore) {
       }),
     deleteUser: (userId) => step('deleteUser', userId, () => {}),
   };
-  return { store, steps, files: () => files };
+  const upload = (name: string) => files.push(`${USER}/${name}`);
+  return { store, steps, files: () => files, upload };
 }
 
 Deno.test('shreds the key, empties the photo folder, then deletes the user', async () => {
@@ -39,7 +40,20 @@ Deno.test('shreds the key, empties the photo folder, then deletes the user', asy
     'listPhotos 0',
     'removePhotos 3',
     `deleteUser ${USER}`,
+    'listPhotos 0',
   ]);
+  assertEquals(files(), []);
+});
+
+Deno.test('a photo another phone uploaded meanwhile goes in the sweep after the user', async () => {
+  const { store, steps, files, upload } = backend(1);
+  const deleteUser = store.deleteUser;
+  store.deleteUser = (userId) => {
+    upload('late.bin');
+    return deleteUser(userId);
+  };
+  await (await handleDeleteAccount(post(), USER, store)).body?.cancel();
+  assertEquals(steps.slice(-2), ['listPhotos 0', 'removePhotos 1']);
   assertEquals(files(), []);
 });
 
@@ -61,7 +75,7 @@ Deno.test('reads every page of photos before removing any', async () => {
 Deno.test('no photos: nothing to remove', async () => {
   const { store, steps } = backend(0);
   await (await handleDeleteAccount(post(), USER, store)).body?.cancel();
-  assertEquals(steps, [`deleteKey ${USER}`, 'listPhotos 0', `deleteUser ${USER}`]);
+  assertEquals(steps, [`deleteKey ${USER}`, 'listPhotos 0', `deleteUser ${USER}`, 'listPhotos 0']);
 });
 
 Deno.test('a failing step stops the run before the user goes (index.ts answers 500)', async () => {

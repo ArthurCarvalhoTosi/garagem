@@ -17,6 +17,9 @@ import type { LocalPhotos } from '@/sync';
 
 const KEY_NAME = 'garagem.attachments.key';
 const DIR = 'attachments';
+// Deletes only ever reach this folder: a path an older app version took from a backup file
+// could name any file of the app (the database included).
+const PHOTO_FILE = /^attachments\/[\w-]+\.bin$/;
 // Enough to read a receipt; keeps each file in the hundreds of KB.
 const MAX_SIDE = 1600;
 const QUALITY = 0.7;
@@ -99,7 +102,7 @@ export async function saveWithPhoto(
 export function deleteRemovedPhotos(db: Db): void {
   try {
     for (const { filePath } of removedAttachmentsQuery(db).all())
-      discard(new File(Paths.document, filePath));
+      if (PHOTO_FILE.test(filePath)) discard(new File(Paths.document, filePath));
   } catch {
     // Best effort, see above.
   }

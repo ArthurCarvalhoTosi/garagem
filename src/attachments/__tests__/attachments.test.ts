@@ -1,4 +1,4 @@
-import { isNull } from 'drizzle-orm';
+import { isNotNull, isNull } from 'drizzle-orm';
 import type { Db } from '@/db/client';
 import {
   createVehicle,
@@ -312,6 +312,16 @@ describe('saveWithPhoto', () => {
       expect(encryptedFiles()).toEqual([`file:///docs/${older.photo}`]);
       // Already gone: nothing to do, no error.
       expect(() => attachmentsModule.deleteRemovedPhotos(db)).not.toThrow();
+
+      // A removed row whose path points outside the folder (an older restore kept it from a
+      // backup file) deletes nothing.
+      db.update(attachments)
+        .set({ filePath: 'SQLite/garagem.db' })
+        .where(isNotNull(attachments.deletedAt))
+        .run();
+      mockFiles.set('file:///docs/SQLite/garagem.db', new Uint8Array([1]));
+      attachmentsModule.deleteRemovedPhotos(db);
+      expect(mockFiles.has('file:///docs/SQLite/garagem.db')).toBe(true);
       expect(db.select().from(attachments).where(isNull(attachments.deletedAt)).all()).toHaveLength(
         1,
       );

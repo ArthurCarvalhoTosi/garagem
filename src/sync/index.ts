@@ -13,6 +13,7 @@ import {
   markSynced,
   pendingRows,
   readSyncPref,
+  syncGeneration,
   writeSyncPref,
   type SyncRow,
 } from '@/db/sync';
@@ -62,6 +63,12 @@ export async function syncOnce(
   key: AESEncryptionKey,
   photos: LocalPhotos,
 ): Promise<SyncResult> {
+  // Checked right before every write and remote call: signing out mid-run stops the run there.
+  const generation = syncGeneration();
+  const live = () => {
+    if (syncGeneration() !== generation) throw new Error('signed out during sync');
+  };
+
   await remote.logAccess();
   const cursor = readSyncPref(db, 'pullCursor');
   const since = cursor ? new Date(Date.parse(cursor) - PULL_OVERLAP_MS).toISOString() : null;
@@ -69,6 +76,7 @@ export async function syncOnce(
   const sealed = await remote.pull(since);
   const opened = await Promise.all(sealed.map((s) => openRow(key, s)));
   const rows = opened.filter((r) => r !== null);
+  live();
   const { applied, skipped } = applyRemote(db, rows);
   // A photo removed on another phone leaves this one right away too: receipts carry CPF.
   photos.deleteRemoved(db);
@@ -91,15 +99,19 @@ export async function syncOnce(
   const outdated = newer > DATA_SCHEMA;
 
   // Read after landing: a row the server just replaced locally is no longer pending.
-  const pending = outdated ? [] : await sendPhotos(db, remote, key, photos, pendingRows(db));
+  const pending = outdated ? [] : await sendPhotos(db, remote, key, photos, pendingRows(db), live);
   for (let i = 0; i < pending.length; i += PUSH_BATCH) {
     const batch = pending.slice(i, i + PUSH_BATCH);
-    await remote.push(await Promise.all(batch.map((r) => sealRow(key, r))));
+    const sealedBatch = await Promise.all(batch.map((r) => sealRow(key, r)));
+    live();
+    await remote.push(sealedBatch);
+    live();
     markSynced(db, batch);
   }
 
-  const badPhotos = await fetchPhotos(db, remote, key, photos);
+  const badPhotos = await fetchPhotos(db, remote, key, photos, live);
 
+  live();
   writeSyncPref(db, 'lastSyncAt', new Date().toISOString());
   return {
     pulled: applied,
@@ -120,11 +132,14 @@ async function sendPhotos(
   key: AESEncryptionKey,
   photos: LocalPhotos,
   pending: SyncRow[],
+  live: () => void,
 ): Promise<SyncRow[]> {
   const removed = pending.filter((r) => r.table === 'attachments' && r.deletedAt).map((r) => r.id);
   for (let i = 0; i < removed.length; i += REMOVE_BATCH) {
     const batch = removed.slice(i, i + REMOVE_BATCH);
+    live();
     await remote.removePhotos(batch);
+    live();
     forgetPhotos(db, batch);
   }
 
@@ -137,7 +152,10 @@ async function sendPhotos(
       } catch {
         continue;
       }
-      await remote.uploadPhoto(r.id, await sealPhoto(key, r.id, jpeg));
+      const sealed = await sealPhoto(key, r.id, jpeg);
+      live();
+      await remote.uploadPhoto(r.id, sealed);
+      live();
       markPhotoUploaded(db, r.id);
     }
     ready.push(r);
@@ -155,6 +173,7 @@ async function fetchPhotos(
   remote: Remote,
   key: AESEncryptionKey,
   photos: LocalPhotos,
+  live: () => void,
 ): Promise<number> {
   let bad = 0;
   for (const p of livePhotos(db)) {
@@ -166,6 +185,7 @@ async function fetchPhotos(
       bad++;
       continue;
     }
+    live();
     await photos.write(p.filePath, jpeg);
     markPhotoUploaded(db, p.id);
   }

@@ -13,8 +13,13 @@ const HEADER = [
   'Com comprovante',
 ];
 
-// Quoted only when needed; a quote inside doubles, as Excel expects.
-const cell = (v: string) => (/[;"\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+// Quoted only when needed; a quote inside doubles, as Excel expects. Text that starts like a
+// formula gets a leading ' so the spreadsheet shows it instead of running it (notes can come
+// from a restored backup).
+const cell = (raw: string) => {
+  const v = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
+  return /[;"\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+};
 const date = (d: string) => d.split('-').reverse().join('/');
 
 /**
