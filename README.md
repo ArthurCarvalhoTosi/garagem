@@ -35,7 +35,7 @@ Os três devem passar antes de todo commit.
 
 ## CI/CD
 
-[.github/workflows/ci.yml](.github/workflows/ci.yml) roda os três comandos acima em todo PR para a `main` e em todo push nela. Na `main`, se passarem, gera um APK Android de release (arm64, assinado com a chave de debug) e o publica como artefato da execução por 30 dias: baixe em **Actions → execução → Artifacts** e instale no celular. Para a Play Store, troque por EAS Build com keystore própria.
+[.github/workflows/ci.yml](.github/workflows/ci.yml) roda os três comandos acima em todo PR para a `main` e em todo push nela. Na `main`, se passarem, gera um APK Android de release (arm64) e o publica como artefato da execução por 30 dias: baixe em **Actions → execução → Artifacts** e instale no celular. Ele é assinado com a chave de CI do projeto, que fica nos secrets `ANDROID_CI_KEYSTORE` (o `.jks` em base64) e `ANDROID_CI_KEY_PASSWORD` (alias `garagem-ci`). Nunca com a chave de debug do template: ela é pública, e qualquer um poderia assinar uma "atualização" que lê as chaves do app no celular. Para a Play Store, o build é pelo EAS.
 
 ## Banco
 
