@@ -831,11 +831,14 @@ export async function replaceAllData(db: Db, rows: BackupRows): Promise<void> {
     keyof BackupRows,
     (typeof BACKUP_TABLES)[keyof BackupRows],
   ][];
+  // A copy dated ahead would win every later edit once synced (last write wins). A day of slack
+  // for the clock of the phone that made the backup.
+  const latest = Date.now() + 24 * 60 * 60 * 1000;
   db.transaction((tx) => {
     for (const [, table] of [...entries].reverse()) tx.delete(table).run();
     for (const [name, table] of entries) {
       const list = rows[name];
-      if (!Array.isArray(list))
+      if (!Array.isArray(list) || !list.every((r) => Date.parse(r.updatedAt) <= latest))
         throw new ValidationError('Este arquivo não é um backup do Garagem.');
       // SQLite caps bound parameters per statement (999 on older builds): 50 rows of ≤ 15 columns fit.
       for (let i = 0; i < list.length; i += 50)

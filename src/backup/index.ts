@@ -22,6 +22,7 @@ const VERSION = 1;
 // OWASP's Argon2id minimum (19 MiB, 2 passes). Pure JS on the phone: a few seconds, once per file.
 const KDF = { name: 'argon2id', m: 19456, t: 2, p: 1 } as const;
 export const MIN_PASSWORD = 8;
+const MAX_FILE_BYTES = 512 * 1024 * 1024;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 type Header = { format: string; version: number; kdf: typeof KDF & { salt: string } };
@@ -76,7 +77,10 @@ export async function createBackupFile(db: Db, password: string, today: ISODate)
 
 /** Opens a backup file; throws ValidationError (BACKUP_ERRORS) for anything that isn't a readable backup. */
 export async function readBackupFile(uri: string, password: string): Promise<Backup> {
-  const bytes = await new File(uri).bytes();
+  const source = new File(uri);
+  // Far above any real backup (each photo is a few hundred KB); a huge file isn't read whole.
+  if (source.size > MAX_FILE_BYTES) throw new ValidationError(BACKUP_ERRORS.notBackup);
+  const bytes = await source.bytes();
   // A header longer than this isn't ours; also keeps a big unrelated file from being parsed whole.
   const newline = bytes.subarray(0, 1024).indexOf(0x0a);
   let header: Header | undefined;

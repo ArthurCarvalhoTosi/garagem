@@ -13,6 +13,7 @@ import { ValidationError } from '@/domain';
 // Files and photos in memory. AES-GCM and Argon2id run for real, so a round trip proves the file
 // only opens with the password and that its header is authenticated.
 const mockFiles = new Map<string, Uint8Array>();
+const mockSizes = new Map<string, number>();
 let mockPhotoCount = 0;
 
 jest.mock('expo-file-system', () => {
@@ -25,6 +26,9 @@ jest.mock('expo-file-system', () => {
     }
     get exists() {
       return mockFiles.has(this.uri);
+    }
+    get size() {
+      return mockSizes.get(this.uri) ?? mockFiles.get(this.uri)?.length ?? 0;
     }
     delete() {
       mockFiles.delete(this.uri);
@@ -163,6 +167,7 @@ let file: string;
 
 beforeEach(async () => {
   mockFiles.clear();
+  mockSizes.clear();
   mockPhotoCount = 0;
   db = await createTestDb();
   const vehicleId = await seed(db, 'Meu Polo Ação');
@@ -277,6 +282,23 @@ test('refuses a file that picks its own Argon2id cost, before spending it', asyn
     new ValidationError(BACKUP_ERRORS.notBackup),
   );
   expect(mockArgon).not.toHaveBeenCalled();
+});
+
+test('a huge file is refused before it is read', async () => {
+  mockSizes.set(file, 600 * 1024 * 1024);
+  await expect(readBackupFile(file, PASSWORD)).rejects.toThrow(
+    new ValidationError(BACKUP_ERRORS.notBackup),
+  );
+});
+
+test('rows dated in the future are refused: once synced they would win every later edit', async () => {
+  const backup = await readBackupFile(file, PASSWORD);
+  const [car] = backup.rows.vehicles;
+  const future = { ...backup.rows, vehicles: [{ ...car, updatedAt: '2099-01-01T00:00:00.000Z' }] };
+  const other = await createTestDb();
+  await expect(restoreBackup(other, { ...backup, rows: future })).rejects.toThrow(
+    new ValidationError(BACKUP_ERRORS.notBackup),
+  );
 });
 
 test('never keeps a file path from the backup, so a restore cannot aim deletes at other files', async () => {
