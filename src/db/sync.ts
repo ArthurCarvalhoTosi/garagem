@@ -218,7 +218,15 @@ export function writeSyncPref(db: Db, name: SyncPref, value: string): void {
 }
 
 /** Forgets what was synced, so another account signing in on this phone starts clean. */
+// Bumped by clearSyncState: a sync still running from before must not write the old account's
+// bookkeeping into the cleared state, nor push its rows under the next account's session.
+let generation = 0;
+export function syncGeneration(): number {
+  return generation;
+}
+
 export function clearSyncState(db: Db): void {
+  generation++;
   db.transaction((tx) => {
     tx.delete(syncState).run();
     tx.delete(devicePrefs).where(like(devicePrefs.key, 'sync:%')).run();

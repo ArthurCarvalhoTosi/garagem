@@ -139,6 +139,28 @@ test('a second sync with nothing new moves nothing', async () => {
   });
 });
 
+test('signing out mid-sync stops the run before it writes or uploads anything more', async () => {
+  await createVehicle(phoneA, { nickname: 'Meu Sandero', ...NEW_CAR }, '2026-10-01');
+  await syncOnce(phoneA, server.remote, key, photosOf(phoneA));
+  await createVehicle(phoneB, { nickname: 'Carro de B', ...NEW_CAR }, '2026-10-01');
+  const pull = server.remote.pull;
+  // The pull answers after the person signed out (signOut clears the sync state).
+  jest.spyOn(server.remote, 'pull').mockImplementationOnce(async (since) => {
+    const rows = await pull(since);
+    clearSyncState(phoneB);
+    return rows;
+  });
+  const before = server.rows.size;
+
+  await expect(syncOnce(phoneB, server.remote, key, photosOf(phoneB))).rejects.toThrow(
+    'signed out during sync',
+  );
+
+  expect(readSyncPref(phoneB, 'pullCursor')).toBeNull();
+  expect(server.rows.size).toBe(before);
+  expect(nicknames(phoneB)).toEqual(['Carro de B']);
+});
+
 test('the pull cursor is the server clock, re-read with an overlap', async () => {
   await createVehicle(phoneA, { nickname: 'Meu Sandero', ...NEW_CAR }, '2026-10-01');
   await syncOnce(phoneA, server.remote, key, photosOf(phoneA));
