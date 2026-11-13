@@ -261,11 +261,48 @@ test('a wrong password or a tampered header does not open it', async () => {
     new ValidationError(BACKUP_ERRORS.wrongPassword),
   );
 
-  const bytes = mockFiles.get(file)!;
-  const tampered = String.fromCharCode(...bytes).replace('"t":2', '"t":1');
-  mockFiles.set(file, ascii(tampered));
+  // Same parsed header, different bytes: only the GCM additional data catches it.
+  const text = String.fromCharCode(...mockFiles.get(file)!);
+  mockFiles.set(file, ascii(text.replace('"version":1', '"version": 1')));
   await expect(readBackupFile(file, PASSWORD)).rejects.toThrow(
     new ValidationError(BACKUP_ERRORS.wrongPassword),
+  );
+});
+
+test('refuses a file that picks its own Argon2id cost, before spending it', async () => {
+  const text = String.fromCharCode(...mockFiles.get(file)!);
+  mockFiles.set(file, ascii(text.replace('"m":19456', '"m":4194304')));
+  mockArgon.mockClear();
+  await expect(readBackupFile(file, PASSWORD)).rejects.toThrow(
+    new ValidationError(BACKUP_ERRORS.notBackup),
+  );
+  expect(mockArgon).not.toHaveBeenCalled();
+});
+
+test('never keeps a file path from the backup, so a restore cannot aim deletes at other files', async () => {
+  const backup = await readBackupFile(file, PASSWORD);
+  const [photo] = backup.rows.attachments;
+  const id = '0190a000-0000-7000-8000-000000000001';
+  backup.rows.attachments.push({
+    ...photo,
+    id,
+    filePath: 'SQLite/garagem.db',
+    deletedAt: '2026-03-02T00:00:00.000Z',
+  });
+  mockFiles.set('file:///docs/SQLite/garagem.db', ascii('DB'));
+  const other = await createTestDb();
+
+  await restoreBackup(other, backup);
+  expect(backupRows(other).attachments.find((a) => a.id === id)?.filePath).toBe(
+    `attachments/${id}.bin`,
+  );
+  // The next restore deletes the previous rows' files: still only inside attachments/.
+  await restoreBackup(other, await readBackupFile(file, PASSWORD));
+  expect(mockFiles.has('file:///docs/SQLite/garagem.db')).toBe(true);
+
+  const badId = { ...backup, rows: { ...backup.rows, attachments: [{ ...photo, id: '../x' }] } };
+  await expect(restoreBackup(other, badId)).rejects.toThrow(
+    new ValidationError(BACKUP_ERRORS.notBackup),
   );
 });
 
