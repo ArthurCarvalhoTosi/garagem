@@ -25,8 +25,17 @@ export async function handleDeleteAccount(
   // The key first: if a later step fails, the data left behind is already unreadable.
   await store.deleteKey(userId);
 
-  // Deleting the user leaves the files behind, so they go first. All names are read before any
-  // removal: paging while removing would skip files.
+  // Deleting the user leaves the files behind, so they go first.
+  await removeAllPhotos(userId, store);
+  await store.deleteUser(userId);
+  // Once more: another phone still signed in could have fetched a new key and uploaded in
+  // between. With the user gone, neither works any more, so this sweep is the last.
+  await removeAllPhotos(userId, store);
+  return Response.json({ deleted: true }, { headers: { 'Cache-Control': 'no-store' } });
+}
+
+async function removeAllPhotos(userId: string, store: AccountStore): Promise<void> {
+  // All names are read before any removal: paging while removing would skip files.
   const photos: string[] = [];
   for (let offset = 0; ; offset += PHOTO_PAGE) {
     const page = await store.listPhotos(userId, offset, PHOTO_PAGE);
@@ -35,7 +44,4 @@ export async function handleDeleteAccount(
   }
   for (let i = 0; i < photos.length; i += PHOTO_PAGE)
     await store.removePhotos(photos.slice(i, i + PHOTO_PAGE));
-
-  await store.deleteUser(userId);
-  return Response.json({ deleted: true }, { headers: { 'Cache-Control': 'no-store' } });
 }

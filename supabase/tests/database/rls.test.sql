@@ -7,7 +7,7 @@ begin;
 set local role postgres;
 set local search_path = extensions, public;
 create extension if not exists pgtap with schema extensions;
-select plan(63);
+select plan(66);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-00000000000a', 'a@test.local'),
@@ -231,9 +231,17 @@ select is(public.open_dossier(sha256('token-unknown'), 'client-1'), null,
   'an unknown link opens nothing');
 select is(public.open_dossier(sha256('token-old'), 'client-1'), null,
   'an expired link opens nothing');
+select lives_ok($$
+  select count(public.open_dossier(sha256('token-unknown'), 'client-' || i))
+  from generate_series(1, 50) i
+$$, 'unknown links from many callers open nothing');
+set local role postgres;
+select is((select count(*)::int from public.dossier_opens), 1,
+  '... and leave no counter behind: only live links count');
+set local role service_role;
 
 select lives_ok($$
-  select count(public.open_dossier(sha256('token-a'), 'client-1')) from generate_series(1, 27)
+  select count(public.open_dossier(sha256('token-a'), 'client-1')) from generate_series(1, 29)
 $$, '30 opens from one caller in 10 minutes pass');
 select throws_ok($$ select public.open_dossier(sha256('token-a'), 'client-1') $$, 'GA429',
   null, 'the 31st is refused');
@@ -323,6 +331,16 @@ select throws_ok($$
   insert into storage.objects (bucket_id, name)
   values ('attachments', '00000000-0000-0000-0000-00000000000a/88888888-8888-8888-8888-888888888888.bin')
 $$, '42501', null, 'without a data key (account being deleted) no photo goes up');
+set local role postgres;
+
+insert into storage.objects (bucket_id, name)
+values ('attachments', '00000000-0000-0000-0000-00000000000a/99999999-9999-9999-9999-999999999999.bin');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select throws_ok($$
+  update storage.objects
+  set name = '00000000-0000-0000-0000-00000000000a/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.bin'
+  where name = '00000000-0000-0000-0000-00000000000a/99999999-9999-9999-9999-999999999999.bin'
+$$, '42501', null, '... nor is one moved or replaced');
 set local role postgres;
 
 -- Access records (Marco Civil) -------------------------------------------------------------

@@ -1,5 +1,6 @@
 import '@supabase/functions-js/edge-runtime.d.ts';
 import { withSupabase } from '@supabase/server';
+import { sessionUserId } from '../_shared/session.ts';
 import { handleUserKey, type KeyStore } from './handler.ts';
 import { fromByteaHex, loadKeks, toByteaHex } from './keys.ts';
 
@@ -10,6 +11,8 @@ export default {
   // 'user': only a valid session JWT gets in; ctx.supabaseAdmin bypasses RLS, which
   // user_keys needs because app users have no grants on it.
   fetch: withSupabase({ auth: 'user' }, async (req, ctx) => {
+    const userId = sessionUserId(ctx.jwtClaims);
+    if (!userId) return Response.json({ error: 'unauthorized' }, { status: 401 });
     const admin = ctx.supabaseAdmin;
     const store: KeyStore = {
       async read(userId) {
@@ -33,7 +36,7 @@ export default {
     };
 
     try {
-      return await handleUserKey(req, ctx.userClaims!.id, store, keks);
+      return await handleUserKey(req, userId, store, keks);
     } catch (e) {
       // Only the message: never the key material, and no details for the caller.
       console.error('user-key failed:', e instanceof Error ? e.message : 'unknown');
