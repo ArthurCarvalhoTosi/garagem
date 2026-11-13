@@ -69,6 +69,17 @@ export async function openDossier(fragment, fetchSealed) {
   return new TextDecoder().decode(plain);
 }
 
+/**
+ * The opened copy as a document to show. DOMParser never runs scripts and the page CSP blocks
+ * them and any load, but not a refresh tag sending the visitor elsewhere: the copy is whatever
+ * its sender sealed, so those go.
+ */
+export function pageOf(html) {
+  const page = new DOMParser().parseFromString(html, 'text/html');
+  for (const tag of page.querySelectorAll('meta[http-equiv]')) tag.remove();
+  return page;
+}
+
 async function fetchSealed(hashHex) {
   const res = await fetch(`${FUNCTION_URL}?h=${hashHex}`, { cache: 'no-store' });
   if (res.status === 404) throw new LinkError('gone');
@@ -79,9 +90,7 @@ async function fetchSealed(hashHex) {
 
 async function main() {
   try {
-    const html = await openDossier(location.hash.slice(1), fetchSealed);
-    // DOMParser never runs scripts, whatever the copy contains; the page CSP blocks them too.
-    const page = new DOMParser().parseFromString(html, 'text/html');
+    const page = pageOf(await openDossier(location.hash.slice(1), fetchSealed));
     document.replaceChild(document.adoptNode(page.documentElement), document.documentElement);
   } catch (e) {
     document.getElementById('status').textContent = MESSAGES[e.code] ?? MESSAGES.failed;
