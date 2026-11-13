@@ -163,6 +163,8 @@ function deriveKey(password: string, salt: Uint8Array, kdf: { m: number; t: numb
 }
 
 function discard(filePath: string) {
+  // Only photo files, like @/attachments' deletes: older versions kept paths from backup files.
+  if (!/^attachments\/[\w-]+\.bin$/.test(filePath)) return;
   try {
     const f = new File(Paths.document, filePath);
     if (f.exists) f.delete();
